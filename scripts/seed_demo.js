@@ -193,4 +193,4 @@ const initialData = {
 };
 
 fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2), 'utf-8');
-console.log('✅ Base de datos inicial sembrada con 8 asistentes de demostración.');
+console.log('[OK] Base de datos inicial sembrada con 8 asistentes de demostración.');

@@ -367,7 +367,7 @@ export default function OperatorView({
               </p>
               {totalCount === 0 && (
                 <div className="mt-4 p-3 bg-amber-50 text-amber-800 rounded-xl text-xs max-w-sm mx-auto border border-amber-200">
-                  ⚠️ No hay asistentes cargados. Andá a la pestaña <b>"Fuente de Datos"</b> para subir un Excel o conectar una Google Sheet.
+                  No hay asistentes cargados. Ve a la pestaña <b>"Fuente de Datos"</b> para subir un archivo Excel o conectar una Google Sheet.
                 </div>
               )}
             </div>

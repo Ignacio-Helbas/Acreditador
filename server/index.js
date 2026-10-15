@@ -341,6 +341,6 @@ app.get('*', (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`🚀 Servidor Acreditador ejecutándose en http://localhost:${PORT}`);
-  console.log(`📡 WebSocket listo para conexiones multi-operador`);
+  console.log(`[Servidor] Acreditador ejecutandose en http://localhost:${PORT}`);
+  console.log(`[WebSocket] Listo para conexiones multi-operador`);
 });

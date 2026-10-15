@@ -102,4 +102,4 @@ XLSX.utils.book_append_sheet(workbook, worksheet, 'Invitados');
 
 const targetPath = path.join(__dirname, '..', 'plantilla_invitados_demo.xlsx');
 XLSX.writeFile(workbook, targetPath);
-console.log(`✅ Archivo demo generado con éxito en: ${targetPath}`);
+console.log(`[OK] Archivo demo generado con exito en: ${targetPath}`);
