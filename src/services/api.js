@@ -104,15 +104,25 @@ class ApiService {
     });
   }
 
-  // Inicializa la conexión WebSocket para multi-operador
+  // Inicializa la conexión WebSocket para multi-operador (si hay servidor Node disponible)
   connectWebSocket() {
     if (typeof window === 'undefined') return;
+
+    // Detectar si estamos en un hosting estático web (GitHub Pages, Vercel, etc.)
+    const hostname = window.location.hostname;
+    const isStaticHost = hostname.includes('github.io') || hostname.includes('vercel.app') || window.location.protocol === 'file:';
+    if (isStaticHost) {
+      // En GitHub Pages o hosting estático puro, la app funciona 100% web desde el navegador
+      this.serverConnected = false;
+      this.notifyListeners({ type: 'SERVER_STATUS', connected: true, mode: 'cloud' });
+      return;
+    }
+
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // Si estamos en Vite dev (puerto 5173), conectamos al proxy en localhost:5173/ws o directo a 3001
     const host = window.location.host;
     const wsUrl = `${protocol}//${host}/ws`;
 
@@ -121,6 +131,7 @@ class ApiService {
 
       this.ws.onopen = () => {
         this.serverConnected = true;
+        this.reconnectAttempts = 0;
         this.notifyListeners({ type: 'SERVER_STATUS', connected: true });
         this.flushOfflineQueue();
       };
@@ -130,7 +141,6 @@ class ApiService {
           const payload = JSON.parse(event.data);
           this.notifyListeners(payload);
 
-          // Si recibimos un estado nuevo o actualizado, guardamos copia en localStorage para offline
           if (payload.type === 'INIT_STATE' || payload.type === 'EVENT_SYNCED') {
             this.saveLocalState(payload.data);
           }
@@ -142,9 +152,13 @@ class ApiService {
       this.ws.onclose = () => {
         this.serverConnected = false;
         this.notifyListeners({ type: 'SERVER_STATUS', connected: false });
-        // Reintentar conexión en 3 segundos
-        clearTimeout(this.reconnectTimer);
-        this.reconnectTimer = setTimeout(() => this.connectWebSocket(), 3000);
+        
+        // Limitar reintentos para no spammear la consola si no hay servidor local
+        this.reconnectAttempts = (this.reconnectAttempts || 0) + 1;
+        if (this.reconnectAttempts <= 3) {
+          clearTimeout(this.reconnectTimer);
+          this.reconnectTimer = setTimeout(() => this.connectWebSocket(), 4000);
+        }
       };
 
       this.ws.onerror = () => {

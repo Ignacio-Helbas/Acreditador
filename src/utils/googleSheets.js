@@ -46,20 +46,38 @@ export async function fetchGoogleSheetViaCSV(urlOrId, customMapping = {}) {
     csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
   }
 
-  // Intentar primero a través del proxy del backend (para evitar CORS) o directo
   let csvText;
   try {
+    // 1. Si hay backend propio disponible, intentar proxy local
     const proxyUrl = `/api/sheets/proxy?url=${encodeURIComponent(csvUrl)}`;
     const res = await fetch(proxyUrl);
-    if (!res.ok) throw new Error(`Proxy error: ${res.statusText}`);
-    csvText = await res.text();
-  } catch (proxyErr) {
-    // Fallback: intento directo desde el cliente
-    const directRes = await fetch(csvUrl);
-    if (!directRes.ok) {
-      throw new Error(`No se pudo acceder a la hoja: ${directRes.status} ${directRes.statusText}. Asegurate de que la hoja tenga permisos "Cualquier persona con el enlace puede ver" o esté publicada en la web.`);
+    if (res.ok) {
+      csvText = await res.text();
+    } else {
+      throw new Error('Local proxy not available');
     }
-    csvText = await directRes.text();
+  } catch (proxyErr) {
+    try {
+      // 2. Intento directo desde el navegador (funciona si la hoja está "Publicada en la web" como CSV)
+      const directRes = await fetch(csvUrl);
+      if (directRes.ok) {
+        csvText = await directRes.text();
+      } else {
+        throw new Error(`Status ${directRes.status}`);
+      }
+    } catch (directErr) {
+      // 3. Fallback a proxy CORS transparente para hosting en GitHub Pages / Vercel
+      try {
+        const corsProxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(csvUrl)}`;
+        const corsRes = await fetch(corsProxy);
+        if (!corsRes.ok) throw new Error('CORS proxy error');
+        csvText = await corsRes.text();
+      } catch (allErr) {
+        throw new Error(
+          'No se pudo acceder a la Google Sheet. Para conectarla por internet: en Google Sheets ve a "Archivo > Compartir > Publicar en la web", elige formato "CSV" y pega ese enlace aquí, o usa una API Key.'
+        );
+      }
+    }
   }
 
   return processRawCsvText(csvText, customMapping);

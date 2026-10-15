@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  base: './', // Permite que funcione en GitHub Pages (subrutas), Vercel o localmente sin rutas absolutas rotas
   server: {
     port: 5173,
     proxy: {
