@@ -10,6 +10,7 @@ import FirebaseSettingsView from './components/FirebaseSettingsView';
 import AdminPinModal from './components/AdminPinModal';
 import PuntoAccesoModal from './components/PuntoAccesoModal';
 import LoadingScreen from './components/LoadingScreen';
+import CommandPalette from './components/CommandPalette';
 import { apiService } from './services/api';
 import { playSuccessSound, playWarningSound } from './utils/sound';
 import { fetchGoogleSheetViaCSV, fetchGoogleSheetViaAPI } from './utils/googleSheets';
@@ -19,6 +20,7 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(() => apiService.isAdmin());
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [isPuntoModalOpen, setIsPuntoModalOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   // Información del Evento
@@ -73,6 +75,18 @@ export default function App() {
       localStorage.setItem('acreditador_theme', 'light');
     }
   }, [isDark]);
+
+  // Atajo global Cmd+K / Ctrl+K estilo shadcn-admin
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Preferencias de Operador
   const [soundEnabled, setSoundEnabled] = useState(() => {
@@ -344,6 +358,22 @@ export default function App() {
     setCurrentTab(tab);
   };
 
+  const handleSelectAttendeeFromCommand = (attendee) => {
+    setCurrentTab('operator');
+  };
+
+  const handleNavigateFromCommand = (view, tab) => {
+    if (view === 'operator') {
+      setCurrentTab('operator');
+    } else if (view === 'admin') {
+      if (!isAdmin) {
+        setIsAdminModalOpen(true);
+      } else {
+        setCurrentTab(tab || 'stats');
+      }
+    }
+  };
+
   if (isInitialLoading) {
     return <LoadingScreen eventName={eventName} eventLogo={eventLogo} />;
   }
@@ -372,6 +402,7 @@ export default function App() {
         onLogoutAdmin={handleLogoutAdmin}
         isDark={isDark}
         onToggleTheme={() => setIsDark((prev) => !prev)}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
       />
 
       {/* Contenido Principal con separación estricta de vistas por rol */}
@@ -448,6 +479,16 @@ export default function App() {
           <AuditLogsView />
         )}
       </main>
+
+      {/* Command Palette Global (Cmd+K / Ctrl+K) estilo shadcn-admin */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        attendees={attendees}
+        onSelectAttendee={handleSelectAttendeeFromCommand}
+        onNavigate={handleNavigateFromCommand}
+        currentView={currentTab}
+      />
 
       {/* Modal de Ingreso de PIN de Administrador */}
       <AdminPinModal

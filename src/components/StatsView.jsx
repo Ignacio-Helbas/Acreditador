@@ -14,11 +14,17 @@ import {
   ChevronRight,
   MapPin,
   Activity,
-  Check,
-  Flame
+  ArrowUpRight,
+  Filter
 } from 'lucide-react';
 import { exportAttendeesToExcel, exportAttendeesToCSV } from '../utils/excel';
 import { subscribeToActivityFeed, isFirebaseConfigured } from '../services/firebase';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from './ui/card';
+import { Button } from './ui/button';
+import { Badge } from './ui/badge';
+import { Input } from './ui/input';
+import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from './ui/table';
+import { formatTime, cn } from '../lib/utils';
 
 export default function StatsView({
   attendees = [],
@@ -47,7 +53,7 @@ export default function StatsView({
     return () => unsubscribe();
   }, []);
 
-  // Métricas generales
+  // Métricas generales (Estilo Tremor KPI)
   const total = attendees.length;
   const accredited = attendees.filter((a) => a.acreditado).length;
   const pending = total - accredited;
@@ -58,7 +64,7 @@ export default function StatsView({
     const counts = {};
     attendees.forEach((a) => {
       if (!a.acreditado) return;
-      const door = a.puntoAcceso || (a.operador ? String(a.operador).split('(')[1]?.replace(')', '') : 'Sin punto asignado') || 'Puerta 1';
+      const door = a.puntoAcceso || (a.operador ? String(a.operador).split('(')[1]?.replace(')', '') : 'Sin asignar') || 'Puerta 1';
       counts[door] = (counts[door] || 0) + 1;
     });
 
@@ -133,362 +139,446 @@ export default function StatsView({
 
   const labels = config.fieldLabels || {};
 
-  const formatTime = (isoString) => {
-    if (!isoString) return '-';
-    try {
-      const date = new Date(isoString);
-      return date.toLocaleTimeString('es-AR', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      });
-    } catch {
-      return '-';
-    }
-  };
-
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-6">
       
-      {/* Encabezado y Botones de Exportación */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-zinc-200 dark:border-zinc-800">
+      {/* Header Estilo Tremor / shadcn-admin */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-zinc-200 dark:border-zinc-800">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-            <span>Panel de Control en Vivo</span>
-          </h1>
-          <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            Supervisá el flujo de acreditaciones en tiempo real por puerta y exportá el reporte oficial.
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+              Dashboard de Acreditación
+            </h1>
+            <Badge variant="outline" className="font-mono">LIVE</Badge>
+          </div>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+            Métricas de afluencia, monitoreo de puntos de acceso y exportación de nómina.
           </p>
         </div>
 
         {/* Acciones de exportación */}
         <div className="flex flex-wrap items-center gap-2">
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => exportAttendeesToExcel(attendees, eventName, config)}
-            className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition flex items-center gap-1.5"
+            className="gap-1.5"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>Exportar Excel (.xlsx)</span>
-          </button>
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>Excel (.xlsx)</span>
+          </Button>
 
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => exportAttendeesToCSV(attendees, eventName, config)}
-            className="px-3.5 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 font-semibold text-xs shadow-sm transition flex items-center gap-1.5"
+            className="gap-1.5"
           >
             <FileText className="w-3.5 h-3.5 text-zinc-500" />
-            <span>Exportar CSV</span>
-          </button>
+            <span>CSV</span>
+          </Button>
 
-          <button
+          <Button
+            variant="destructive"
+            size="sm"
             onClick={() => setShowResetModal(true)}
-            className="px-3 py-2 rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400 hover:bg-rose-100 font-semibold text-xs transition flex items-center gap-1"
+            className="gap-1.5"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <RotateCcw className="w-3 h-3" />
             <span>Reiniciar</span>
-          </button>
+          </Button>
         </div>
       </div>
 
-      {/* Tarjetas de Métricas Generales */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white dark:bg-zinc-900 rounded-lg p-4 border border-zinc-200 dark:border-zinc-800 shadow-sm">
-          <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Total Invitados</p>
-          <p className="text-2xl sm:text-3xl font-extrabold text-zinc-900 dark:text-zinc-100 font-mono mt-1">{total}</p>
-          <p className="text-[11px] text-zinc-400 mt-0.5">En nómina del evento</p>
-        </div>
-
-        <div className="bg-white dark:bg-zinc-900 rounded-lg p-4 border border-zinc-200 dark:border-zinc-800 shadow-sm">
-          <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Acreditados</p>
-          <p className="text-2xl sm:text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono mt-1">{accredited}</p>
-          <p className="text-[11px] text-zinc-400 mt-0.5">{rate}% del total</p>
-        </div>
-
-        <div className="bg-white dark:bg-zinc-900 rounded-lg p-4 border border-zinc-200 dark:border-zinc-800 shadow-sm">
-          <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Pendientes</p>
-          <p className="text-2xl sm:text-3xl font-extrabold text-amber-600 dark:text-amber-400 font-mono mt-1">{pending}</p>
-          <p className="text-[11px] text-zinc-400 mt-0.5">Por ingresar</p>
-        </div>
-
-        <div className="bg-white dark:bg-zinc-900 rounded-lg p-4 border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col justify-center">
-          <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">Afluencia Total</p>
-          <div className="w-full h-3 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden border border-zinc-200 dark:border-zinc-700">
-            <div className="h-full bg-emerald-600 rounded-full transition-all" style={{ width: `${rate}%` }} />
-          </div>
-          <span className="text-xs font-mono font-bold text-right text-zinc-700 dark:text-zinc-300 mt-1">{rate}%</span>
-        </div>
-      </div>
-
-      {/* Grid de 2 Columnas: Desglose por Puntos de Acceso + Feed en Vivo */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Tarjetas de Métricas Estilo Tremor */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
-        {/* Columna Izquierda: Desglose por Punto de Acceso / Puerta */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
-            <h3 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider flex items-center gap-1.5">
-              <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <span>Acreditaciones por Punto de Acceso</span>
-            </h3>
-            <span className="text-[10px] font-mono text-zinc-400">
-              {doorStats.length} {doorStats.length === 1 ? 'puerta' : 'puertas activas'}
-            </span>
-          </div>
-
-          {doorStats.length === 0 ? (
-            <p className="text-xs text-zinc-400 py-8 text-center">
-              Aún no hay ingresos registrados desde ningún punto de acceso.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {doorStats.map((item) => (
-                <div key={item.door} className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800">
-                  <div className="flex justify-between items-center mb-1.5">
-                    <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                      {item.door}
-                    </span>
-                    <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                      {item.count} ingresos ({item.percentage}%)
-                    </span>
-                  </div>
-                  <div className="w-full h-2 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-600 rounded-full transition-all" style={{ width: `${item.percentage}%` }} />
-                  </div>
-                </div>
-              ))}
+        {/* KPI: Total Invitados */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+              Total Nómina
+            </CardTitle>
+            <Users className="w-4 h-4 text-zinc-400" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold font-mono text-zinc-900 dark:text-zinc-100">{total}</div>
+            <div className="flex items-center gap-1.5 mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+              <span>Invitados cargados</span>
             </div>
-          )}
-        </div>
+          </CardContent>
+        </Card>
 
-        {/* Columna Derecha: Feed de Actividad en Tiempo Real (Streaming) */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
-            <h3 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider flex items-center gap-1.5">
-              <Activity className="w-4 h-4 text-amber-500" />
-              <span>Feed de Ingresos en Vivo</span>
-            </h3>
-            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
-              EN VIVO
-            </span>
-          </div>
+        {/* KPI: Acreditados */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+              Acreditados
+            </CardTitle>
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">{accredited}</div>
+            <div className="flex items-center gap-1.5 mt-1">
+              <Badge variant="success" className="text-[10px] px-1.5 py-0 font-mono">
+                {rate}% ingresado
+              </Badge>
+              <span className="text-[11px] text-zinc-400">del total</span>
+            </div>
+          </CardContent>
+        </Card>
 
-          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-            {displayFeed.length === 0 ? (
-              <p className="text-xs text-zinc-400 py-8 text-center">
-                Esperando las primeras acreditaciones para mostrar el flujo en vivo...
-              </p>
+        {/* KPI: Pendientes */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+              Pendientes
+            </CardTitle>
+            <Clock className="w-4 h-4 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold font-mono text-zinc-900 dark:text-zinc-100">{pending}</div>
+            <div className="flex items-center gap-1.5 mt-1">
+              <Badge variant="warning" className="text-[10px] px-1.5 py-0 font-mono">
+                {100 - rate}%
+              </Badge>
+              <span className="text-[11px] text-zinc-400">por arribar</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* KPI: Tremor Progress Bar */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+              Progreso General
+            </CardTitle>
+            <span className="text-xs font-mono font-semibold text-zinc-700 dark:text-zinc-300">{rate}%</span>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="w-full h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-emerald-600 dark:bg-emerald-500 rounded-full transition-all duration-500 ease-out" 
+                style={{ width: `${rate}%` }} 
+              />
+            </div>
+            <div className="flex justify-between text-[11px] font-mono text-zinc-400">
+              <span>{accredited} ingresaron</span>
+              <span>{pending} faltan</span>
+            </div>
+          </CardContent>
+        </Card>
+
+      </div>
+
+      {/* Grid: Desglose por Puntos de Acceso + Live Stream Feed */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        
+        {/* Desglose por Puerta / Acceso */}
+        <Card>
+          <CardHeader className="pb-3 border-b border-zinc-100 dark:border-zinc-800/80">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <CardTitle className="text-xs font-semibold flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Acreditaciones por Punto de Acceso</span>
+                </CardTitle>
+                <CardDescription>Distribución de ingresos por puerta física</CardDescription>
+              </div>
+              <Badge variant="secondary" className="font-mono text-[10px]">
+                {doorStats.length} {doorStats.length === 1 ? 'puerta' : 'puertas'}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {doorStats.length === 0 ? (
+              <div className="py-8 text-center text-xs text-zinc-400">
+                Aún no hay ingresos registrados desde ningún punto de acceso.
+              </div>
             ) : (
-              displayFeed.map((item, idx) => (
-                <div
-                  key={item.id || `${item.dni}-${idx}`}
-                  className="p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs transition animate-in fade-in"
-                >
-                  <div className="min-w-0 pr-2">
-                    <p className="font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                      {item.nombre} {item.apellido}
-                    </p>
-                    <p className="text-zinc-500 dark:text-zinc-400 text-[11px] truncate flex items-center gap-1.5">
-                      <span className="font-mono font-semibold">DNI: {item.dni}</span>
-                      <span>•</span>
-                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">{item.puntoAcceso || item.operador}</span>
-                    </p>
+              <div className="space-y-3">
+                {doorStats.map((item) => (
+                  <div key={item.door} className="space-y-1">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                        {item.door}
+                      </span>
+                      <span className="font-mono text-zinc-500 dark:text-zinc-400 text-[11px]">
+                        <strong className="text-zinc-900 dark:text-zinc-100">{item.count}</strong> ({item.percentage}%)
+                      </span>
+                    </div>
+                    {/* Tremor Progress Bar para cada puerta */}
+                    <div className="w-full h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-emerald-600 dark:bg-emerald-500 rounded-full" 
+                        style={{ width: `${item.percentage}%` }} 
+                      />
+                    </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <span className="text-zinc-500 dark:text-zinc-400 font-mono text-[11px] block">
-                      {formatTime(item.timestamp)}
-                    </span>
-                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded font-mono">
-                      INGRESÓ
-                    </span>
-                  </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
+
+        {/* Live Feed con indicador de latencia */}
+        <Card>
+          <CardHeader className="pb-3 border-b border-zinc-100 dark:border-zinc-800/80">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <CardTitle className="text-xs font-semibold flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Feed de Ingresos en Vivo</span>
+                </CardTitle>
+                <CardDescription>Actividad transmitida en tiempo real</CardDescription>
+              </div>
+              <Badge variant="warning" className="gap-1 font-mono text-[10px]">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                EN VIVO
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {displayFeed.length === 0 ? (
+                <div className="py-8 text-center text-xs text-zinc-400">
+                  Esperando las primeras acreditaciones para mostrar el flujo en tiempo real...
+                </div>
+              ) : (
+                displayFeed.map((item, idx) => (
+                  <div
+                    key={item.id || `${item.dni}-${idx}`}
+                    className="p-2.5 rounded-md border border-zinc-100 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/50 flex items-center justify-between text-xs"
+                  >
+                    <div className="min-w-0 pr-2">
+                      <p className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                        {item.nombre} {item.apellido}
+                      </p>
+                      <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-[11px] mt-0.5">
+                        <span className="font-mono">DNI {item.dni}</span>
+                        <span>•</span>
+                        <span className="text-emerald-600 dark:text-emerald-400 font-medium truncate">{item.puntoAcceso || item.operador}</span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="font-mono text-[11px] text-zinc-400 block">
+                        {formatTime(item.timestamp)}
+                      </span>
+                      <Badge variant="success" className="text-[9px] px-1 py-0 font-mono">
+                        Check-in
+                      </Badge>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
       </div>
 
       {/* Desglose por Categoría / Tipo de Entrada */}
       {categoryStats.length > 0 && (
-        <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
-          <h3 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-            Desglose por {labels[categoryField] || categoryField}
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {categoryStats.map((item) => (
-              <div key={item.category} className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">{item.category}</span>
-                  <span className="text-xs font-mono font-semibold text-zinc-500 dark:text-zinc-400">
-                    {item.accredited}/{item.total} ({item.percentage}%)
-                  </span>
+        <Card>
+          <CardHeader className="pb-3 border-b border-zinc-100 dark:border-zinc-800/80">
+            <CardTitle className="text-xs font-semibold">
+              Desglose por {labels[categoryField] || categoryField}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {categoryStats.map((item) => (
+                <div key={item.category} className="p-3 rounded-md border border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 space-y-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate">{item.category}</span>
+                    <span className="font-mono text-zinc-500 dark:text-zinc-400 text-[11px]">
+                      {item.accredited}/{item.total} ({item.percentage}%)
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-600 dark:bg-emerald-500 rounded-full" style={{ width: `${item.percentage}%` }} />
+                  </div>
                 </div>
-                <div className="w-full h-2 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-emerald-600 rounded-full" style={{ width: `${item.percentage}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
-      {/* Tabla Completa de Asistentes */}
-      <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden space-y-4 p-5">
-        
-        {/* Barra de Búsqueda y Filtro de la Tabla */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-              placeholder="Buscar por DNI o nombre..."
-              className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-xs font-medium text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            />
-          </div>
+      {/* Tabla Completa de Asistentes estilo shadcn/ui */}
+      <Card>
+        <CardHeader className="pb-4 border-b border-zinc-100 dark:border-zinc-800/80">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-2.5" />
+              <Input
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Buscar por DNI o apellido..."
+                className="pl-8"
+              />
+            </div>
 
-          <div className="inline-flex rounded-lg bg-zinc-100 dark:bg-zinc-800 p-0.5 border border-zinc-200 dark:border-zinc-700 text-xs self-start sm:self-auto">
-            <button
-              onClick={() => { setStatusFilter('ALL'); setCurrentPage(1); }}
-              className={`px-2.5 py-1 rounded font-semibold transition ${statusFilter === 'ALL' ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm' : 'text-zinc-600 dark:text-zinc-400'}`}
-            >
-              Todos ({total})
-            </button>
-            <button
-              onClick={() => { setStatusFilter('ACCREDITED'); setCurrentPage(1); }}
-              className={`px-2.5 py-1 rounded font-semibold transition ${statusFilter === 'ACCREDITED' ? 'bg-white dark:bg-zinc-900 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-zinc-600 dark:text-zinc-400'}`}
-            >
-              Acreditados ({accredited})
-            </button>
-            <button
-              onClick={() => { setStatusFilter('PENDING'); setCurrentPage(1); }}
-              className={`px-2.5 py-1 rounded font-semibold transition ${statusFilter === 'PENDING' ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm' : 'text-zinc-600 dark:text-zinc-400'}`}
-            >
-              Pendientes ({pending})
-            </button>
-          </div>
-        </div>
-
-        {/* Tabla */}
-        <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-          <table className="w-full text-left text-xs text-zinc-700 dark:text-zinc-300">
-            <thead className="bg-zinc-50 dark:bg-zinc-950 text-zinc-500 dark:text-zinc-400 uppercase text-[10px] font-bold border-b border-zinc-200 dark:border-zinc-800">
-              <tr>
-                <th className="px-3 py-2.5 font-mono">DNI</th>
-                <th className="px-3 py-2.5">Nombre y Apellido</th>
-                <th className="px-3 py-2.5">Estado</th>
-                <th className="px-3 py-2.5">Hora Acreditación</th>
-                <th className="px-3 py-2.5">Punto / Operador</th>
-                <th className="px-3 py-2.5 text-right">Acción</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-              {paginatedAttendees.map((att) => (
-                <tr key={att.id || att.dni} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/40">
-                  <td className="px-3 py-2 font-mono font-bold text-zinc-900 dark:text-zinc-100">{att.dni}</td>
-                  <td className="px-3 py-2 font-semibold text-zinc-800 dark:text-zinc-200">{att.nombre} {att.apellido}</td>
-                  <td className="px-3 py-2">
-                    {att.acreditado ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-mono">
-                        Acreditado
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
-                        Pendiente
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-zinc-600 dark:text-zinc-400 text-[11px]">{formatTime(att.fechaAcreditacion)}</td>
-                  <td className="px-3 py-2 text-zinc-500 text-[11px] truncate max-w-[140px]">
-                    {att.puntoAcceso || att.operador || '-'}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <button
-                      onClick={() => onToggleAccredit(att.dni, !att.acreditado)}
-                      className={`px-2 py-1 rounded text-[11px] font-semibold transition ${
-                        att.acreditado
-                          ? 'text-zinc-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20'
-                          : 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 font-bold'
-                      }`}
-                    >
-                      {att.acreditado ? 'Deshacer' : 'Acreditar'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {paginatedAttendees.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-zinc-400 text-xs">
-                    No se encontraron asistentes con los filtros actuales.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Paginación */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between text-xs text-zinc-500 pt-2">
-            <span>Página {currentPage} de {totalPages}</span>
-            <div className="flex items-center space-x-1">
+            <div className="inline-flex rounded-md border border-zinc-200 bg-zinc-100 p-0.5 text-xs dark:border-zinc-800 dark:bg-zinc-800/50">
               <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="p-1 rounded border border-zinc-200 dark:border-zinc-800 disabled:opacity-40"
+                onClick={() => { setStatusFilter('ALL'); setCurrentPage(1); }}
+                className={cn(
+                  'px-2.5 py-1 rounded text-xs font-medium transition-colors',
+                  statusFilter === 'ALL'
+                    ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                )}
               >
-                <ChevronLeft className="w-4 h-4" />
+                Todos ({total})
               </button>
               <button
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="p-1 rounded border border-zinc-200 dark:border-zinc-800 disabled:opacity-40"
+                onClick={() => { setStatusFilter('ACCREDITED'); setCurrentPage(1); }}
+                className={cn(
+                  'px-2.5 py-1 rounded text-xs font-medium transition-colors',
+                  statusFilter === 'ACCREDITED'
+                    ? 'bg-white text-emerald-600 shadow-sm dark:bg-zinc-900 dark:text-emerald-400'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                )}
               >
-                <ChevronRight className="w-4 h-4" />
+                Acreditados ({accredited})
+              </button>
+              <button
+                onClick={() => { setStatusFilter('PENDING'); setCurrentPage(1); }}
+                className={cn(
+                  'px-2.5 py-1 rounded text-xs font-medium transition-colors',
+                  statusFilter === 'PENDING'
+                    ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                )}
+              >
+                Pendientes ({pending})
               </button>
             </div>
           </div>
-        )}
+        </CardHeader>
 
-      </div>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="font-mono">DNI</TableHead>
+                <TableHead>Asistente</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead>Hora Ingreso</TableHead>
+                <TableHead>Punto de Acceso</TableHead>
+                <TableHead className="text-right">Acción</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paginatedAttendees.map((att) => (
+                <TableRow key={att.id || att.dni}>
+                  <TableCell className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
+                    {att.dni}
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {att.apellido}, {att.nombre}
+                  </TableCell>
+                  <TableCell>
+                    {att.acreditado ? (
+                      <Badge variant="success">Acreditado</Badge>
+                    ) : (
+                      <Badge variant="outline">Pendiente</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="font-mono text-[11px] text-zinc-500">
+                    {formatTime(att.fechaAcreditacion)}
+                  </TableCell>
+                  <TableCell className="text-zinc-500 text-[11px] truncate max-w-[140px]">
+                    {att.puntoAcceso || att.operador || '-'}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant={att.acreditado ? 'ghost' : 'outline'}
+                      size="sm"
+                      onClick={() => onToggleAccredit(att.dni, !att.acreditado)}
+                      className={att.acreditado ? 'text-zinc-400 hover:text-rose-600' : 'text-emerald-600 dark:text-emerald-400'}
+                    >
+                      {att.acreditado ? 'Deshacer' : 'Acreditar'}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+
+              {paginatedAttendees.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-zinc-400">
+                    No se encontraron asistentes con los filtros actuales.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+
+          {/* Paginación */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800 px-4 py-3 text-xs text-zinc-500">
+              <span>Página {currentPage} de {totalPages} ({filteredAttendees.length} resultados)</span>
+              <div className="flex items-center space-x-1">
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Modal de Confirmación para Reiniciar Acreditaciones */}
       {showResetModal && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 max-w-md w-full shadow-xl border border-zinc-200 dark:border-zinc-800">
-            <div className="w-10 h-10 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-lg flex items-center justify-center mb-3 border border-rose-200 dark:border-rose-800">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-            <h3 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-zinc-100">
-              ¿Reiniciar todas las acreditaciones?
-            </h3>
-            <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 mt-1">
-              Esta acción marcará a todos los <b>{total} asistentes</b> como <b>pendientes</b> en la base de datos en tiempo real y borrará las marcas de tiempo. La nómina no se borrará.
-            </p>
-            <div className="flex space-x-3 mt-5">
-              <button
+          <Card className="max-w-md w-full shadow-xl">
+            <CardHeader>
+              <div className="w-9 h-9 rounded-md bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 flex items-center justify-center mb-2 border border-rose-200 dark:border-rose-900">
+                <AlertTriangle className="w-4 h-4" />
+              </div>
+              <CardTitle className="text-base font-bold">
+                ¿Reiniciar todas las acreditaciones?
+              </CardTitle>
+              <CardDescription>
+                Esta acción marcará a todos los <strong>{total} asistentes</strong> como pendientes en la base de datos en tiempo real y borrará las marcas de tiempo. La nómina no se borrará.
+              </CardDescription>
+            </CardHeader>
+            <div className="flex space-x-2.5 p-4 pt-0">
+              <Button
+                variant="outline"
+                className="flex-1"
                 onClick={() => setShowResetModal(false)}
-                className="flex-1 py-2 px-3 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 font-semibold text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
               >
                 Cancelar
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
                 onClick={async () => {
                   await onResetAccreditations();
                   setShowResetModal(false);
                 }}
-                className="flex-1 py-2 px-3 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-sm transition"
               >
                 Sí, reiniciar a cero
-              </button>
+              </Button>
             </div>
-          </div>
+          </Card>
         </div>
       )}
 

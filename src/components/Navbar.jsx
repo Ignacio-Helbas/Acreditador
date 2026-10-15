@@ -15,8 +15,13 @@ import {
   Sparkles, 
   ClipboardList,
   MapPin,
-  Flame
+  Flame,
+  Search,
+  Command
 } from 'lucide-react';
+import { Button } from './ui/button';
+import { Badge } from './ui/badge';
+import { cn } from '../lib/utils';
 
 export default function Navbar({ 
   currentTab, 
@@ -36,12 +41,13 @@ export default function Navbar({
   onOpenAdminModal,
   onLogoutAdmin,
   isDark,
-  onToggleTheme
+  onToggleTheme,
+  onOpenCommandPalette
 }) {
   return (
     <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-40 transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-14 sm:h-16 gap-2">
           
           {/* Logo y Nombre del Evento */}
           <div className="flex items-center space-x-3 min-w-0">
@@ -49,30 +55,30 @@ export default function Navbar({
               <img 
                 src={eventLogo} 
                 alt="Logo del evento" 
-                className="h-9 w-9 object-contain rounded-md border border-zinc-200 dark:border-zinc-800 bg-white p-0.5 shrink-0"
+                className="h-8 w-8 sm:h-9 sm:w-9 object-contain rounded-md border border-zinc-200 dark:border-zinc-800 bg-white p-0.5 shrink-0"
               />
             ) : (
-              <div className="h-9 w-9 rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 flex items-center justify-center font-bold text-sm shrink-0">
+              <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 flex items-center justify-center font-bold text-xs sm:text-sm shrink-0">
                 {eventName ? eventName.charAt(0).toUpperCase() : 'E'}
               </div>
             )}
 
             <div className="min-w-0">
-              <h1 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm sm:text-base leading-tight truncate max-w-[170px] sm:max-w-xs md:max-w-md">
+              <h1 className="font-bold text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm md:text-base leading-tight truncate max-w-[140px] sm:max-w-xs">
                 {eventName || 'Acreditación de Eventos'}
               </h1>
               
               {/* Información de Rol y Punto de Acceso */}
               <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 font-medium truncate">
                 {isAdmin ? (
-                  <span className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-bold">
+                  <span className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-bold text-[11px]">
                     <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                     Panel Administrador
                   </span>
                 ) : (
                   <button
                     onClick={onOpenPuntoModal}
-                    className="flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400 transition group"
+                    className="flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400 transition group text-[11px]"
                     title="Hacé clic para cambiar de puerta o nombre de operador"
                   >
                     <MapPin className="w-3 h-3 text-emerald-600 shrink-0 group-hover:scale-110 transition" />
@@ -84,77 +90,96 @@ export default function Navbar({
             </div>
           </div>
 
+          {/* Buscador Rápido Global (Cmd+K) estilo shadcn-admin */}
+          <button
+            onClick={onOpenCommandPalette}
+            className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:border-zinc-300 dark:hover:border-zinc-700 transition"
+          >
+            <Search className="w-3.5 h-3.5 text-zinc-400" />
+            <span className="font-normal text-zinc-500">Buscar asistente o acción...</span>
+            <kbd className="hidden lg:inline-flex items-center gap-0.5 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.2 font-mono text-[10px] text-zinc-500">
+              <Command className="w-2.5 h-2.5" /> K
+            </kbd>
+          </button>
+
           {/* Navegación por Pestañas (Solo visible en modo Administrador) */}
           {isAdmin ? (
-            <nav className="hidden xl:flex items-center bg-zinc-100 dark:bg-zinc-800/70 p-1 rounded-lg border border-zinc-200 dark:border-zinc-700/60 text-xs font-semibold">
+            <nav className="hidden xl:flex items-center bg-zinc-100 dark:bg-zinc-800/70 p-0.5 rounded-md border border-zinc-200 dark:border-zinc-700/60 text-xs font-semibold">
               <button
                 onClick={() => setCurrentTab('operator')}
-                className={`px-3 py-1.5 rounded-md transition ${
+                className={cn(
+                  'px-2.5 py-1 rounded transition-colors text-xs font-medium',
                   currentTab === 'operator'
-                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-                }`}
+                )}
               >
-                Vista Puerta
+                Puerta
               </button>
               <button
                 onClick={() => setCurrentTab('stats')}
-                className={`px-3 py-1.5 rounded-md transition ${
+                className={cn(
+                  'px-2.5 py-1 rounded transition-colors text-xs font-medium',
                   currentTab === 'stats'
-                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-                }`}
+                )}
               >
-                Métricas en Vivo
+                Métricas
               </button>
               <button
                 onClick={() => setCurrentTab('datasource')}
-                className={`px-3 py-1.5 rounded-md transition ${
+                className={cn(
+                  'px-2.5 py-1 rounded transition-colors text-xs font-medium',
                   currentTab === 'datasource'
-                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-                }`}
+                )}
               >
                 Fuente de Datos
               </button>
               <button
                 onClick={() => setCurrentTab('firebase')}
-                className={`px-3 py-1.5 rounded-md transition flex items-center gap-1 ${
+                className={cn(
+                  'px-2.5 py-1 rounded transition-colors text-xs font-medium flex items-center gap-1',
                   currentTab === 'firebase'
-                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-                }`}
+                )}
               >
-                <Flame className="w-3.5 h-3.5 text-amber-500" />
-                <span>Firebase Cloud</span>
+                <Flame className="w-3 h-3 text-amber-500" />
+                <span>Cloud</span>
               </button>
               <button
                 onClick={() => setCurrentTab('settings')}
-                className={`px-3 py-1.5 rounded-md transition ${
+                className={cn(
+                  'px-2.5 py-1 rounded transition-colors text-xs font-medium',
                   currentTab === 'settings'
-                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-                }`}
+                )}
               >
                 Campos
               </button>
               <button
                 onClick={() => setCurrentTab('branding')}
-                className={`px-3 py-1.5 rounded-md transition ${
+                className={cn(
+                  'px-2.5 py-1 rounded transition-colors text-xs font-medium',
                   currentTab === 'branding'
-                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-                }`}
+                )}
               >
-                Marca y Logo
+                Marca
               </button>
               <button
                 onClick={() => setCurrentTab('audit')}
-                className={`px-3 py-1.5 rounded-md transition ${
+                className={cn(
+                  'px-2.5 py-1 rounded transition-colors text-xs font-medium',
                   currentTab === 'audit'
-                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-                }`}
+                )}
               >
                 Auditoría
               </button>
@@ -168,20 +193,24 @@ export default function Navbar({
             </div>
           )}
 
-          {/* Acciones de la derecha: Tema, Sonido, Conexión y Rol */}
+          {/* Acciones de la derecha: Command Móvil, Tema, Sonido, Conexión y Rol */}
           <div className="flex items-center space-x-1.5 sm:space-x-2">
             
+            {/* Botón Command en móvil */}
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={onOpenCommandPalette}
+              className="md:hidden"
+              title="Buscar (Cmd+K)"
+            >
+              <Search className="w-3.5 h-3.5 text-zinc-500" />
+            </Button>
+
             {/* Indicador de conexión / Firebase en tiempo real */}
-            <div 
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border flex items-center gap-1.5 ${
-                isOnline && isFirestore
-                  ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800'
-                  : isOnline && serverConnected
-                  ? 'text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800'
-                  : !isOnline
-                  ? 'text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900'
-                  : 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800'
-              }`}
+            <Badge
+              variant={!isOnline ? 'destructive' : isFirestore ? 'success' : serverConnected ? 'info' : 'outline'}
+              className="hidden sm:inline-flex gap-1.5 py-1 font-mono text-[10px]"
               title={
                 !isOnline 
                   ? 'Sin conexión a internet' 
@@ -192,55 +221,58 @@ export default function Navbar({
                   : 'Modo local sin base en tiempo real'
               }
             >
-              <span className={`w-2 h-2 rounded-full shrink-0 ${
+              <span className={cn(
+                'w-1.5 h-1.5 rounded-full',
                 isOnline && (isFirestore || serverConnected) ? 'bg-emerald-500 animate-pulse' : !isOnline ? 'bg-rose-500' : 'bg-amber-500'
-              }`} />
-              <span className="hidden md:inline font-mono text-[11px]">
-                {!isOnline ? 'Sin internet' : isFirestore ? 'En vivo (Cloud)' : serverConnected ? 'En línea' : 'Local'}
+              )} />
+              <span>
+                {!isOnline ? 'Offline' : isFirestore ? 'Cloud' : serverConnected ? 'Online' : 'Local'}
               </span>
-            </div>
+            </Badge>
 
             {/* Toggle Modo Oscuro */}
-            <button
+            <Button
+              variant="outline"
+              size="icon-sm"
               onClick={onToggleTheme}
               title={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-              className="p-2 rounded-lg text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 transition"
             >
-              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
+              {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+            </Button>
 
             {/* Toggle de sonido */}
-            <button
+            <Button
+              variant={soundEnabled ? 'outline' : 'destructive'}
+              size="icon-sm"
               onClick={() => setSoundEnabled(!soundEnabled)}
               title={soundEnabled ? 'Sonidos activados' : 'Sonidos silenciados'}
-              className={`p-2 rounded-lg text-xs font-medium border transition ${
-                soundEnabled 
-                  ? 'text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800' 
-                  : 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900/50'
-              }`}
             >
-              {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-            </button>
+              {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+            </Button>
 
             {/* Botón de Rol: Entrar a Admin o Salir */}
             {isAdmin ? (
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={onLogoutAdmin}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-300 dark:border-zinc-700 transition"
+                className="gap-1 text-xs"
                 title="Cerrar sesión de administrador y volver a modo operador"
               >
-                <LogOut className="w-3.5 h-3.5" />
+                <LogOut className="w-3 h-3" />
                 <span className="hidden sm:inline">Cerrar Admin</span>
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={onOpenAdminModal}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 transition"
+                className="gap-1 text-xs"
                 title="Ingresar como Administrador"
               >
-                <Lock className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
+                <Lock className="w-3 h-3 text-zinc-400" />
                 <span className="hidden sm:inline">Admin</span>
-              </button>
+              </Button>
             )}
           </div>
 
@@ -248,61 +280,68 @@ export default function Navbar({
 
         {/* Barra secundaria en móviles para Admin */}
         {isAdmin && (
-          <div className="xl:hidden flex items-center overflow-x-auto py-2 space-x-2 border-t border-zinc-100 dark:border-zinc-800 text-xs font-medium no-scrollbar">
+          <div className="xl:hidden flex items-center overflow-x-auto py-2 space-x-1 border-t border-zinc-100 dark:border-zinc-800 text-xs font-medium no-scrollbar">
             <button
               onClick={() => setCurrentTab('operator')}
-              className={`px-2.5 py-1 rounded-md shrink-0 ${
-                currentTab === 'operator' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
-              }`}
+              className={cn(
+                'px-2 py-0.5 rounded shrink-0 text-xs font-medium',
+                currentTab === 'operator' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
+              )}
             >
               Puerta
             </button>
             <button
               onClick={() => setCurrentTab('stats')}
-              className={`px-2.5 py-1 rounded-md shrink-0 ${
-                currentTab === 'stats' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
-              }`}
+              className={cn(
+                'px-2 py-0.5 rounded shrink-0 text-xs font-medium',
+                currentTab === 'stats' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
+              )}
             >
-              Métricas en Vivo
+              Métricas
             </button>
             <button
               onClick={() => setCurrentTab('datasource')}
-              className={`px-2.5 py-1 rounded-md shrink-0 ${
-                currentTab === 'datasource' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
-              }`}
+              className={cn(
+                'px-2 py-0.5 rounded shrink-0 text-xs font-medium',
+                currentTab === 'datasource' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
+              )}
             >
               Datos
             </button>
             <button
               onClick={() => setCurrentTab('firebase')}
-              className={`px-2.5 py-1 rounded-md shrink-0 flex items-center gap-1 ${
-                currentTab === 'firebase' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
-              }`}
+              className={cn(
+                'px-2 py-0.5 rounded shrink-0 text-xs font-medium flex items-center gap-1',
+                currentTab === 'firebase' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
+              )}
             >
               <Flame className="w-3 h-3 text-amber-500" />
-              <span>Firebase</span>
+              <span>Cloud</span>
             </button>
             <button
               onClick={() => setCurrentTab('settings')}
-              className={`px-2.5 py-1 rounded-md shrink-0 ${
-                currentTab === 'settings' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
-              }`}
+              className={cn(
+                'px-2 py-0.5 rounded shrink-0 text-xs font-medium',
+                currentTab === 'settings' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
+              )}
             >
               Campos
             </button>
             <button
               onClick={() => setCurrentTab('branding')}
-              className={`px-2.5 py-1 rounded-md shrink-0 ${
-                currentTab === 'branding' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
-              }`}
+              className={cn(
+                'px-2 py-0.5 rounded shrink-0 text-xs font-medium',
+                currentTab === 'branding' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
+              )}
             >
-              Logo
+              Marca
             </button>
             <button
               onClick={() => setCurrentTab('audit')}
-              className={`px-2.5 py-1 rounded-md shrink-0 ${
-                currentTab === 'audit' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
-              }`}
+              className={cn(
+                'px-2 py-0.5 rounded shrink-0 text-xs font-medium',
+                currentTab === 'audit' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
+              )}
             >
               Auditoría
             </button>
