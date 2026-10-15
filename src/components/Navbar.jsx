@@ -7,13 +7,15 @@ import {
   WifiOff, 
   Volume2, 
   VolumeX, 
-  FileSpreadsheet,
-  Lock,
-  LogOut,
-  Sun,
-  Moon,
-  Sparkles,
-  ClipboardList
+  FileSpreadsheet, 
+  Lock, 
+  LogOut, 
+  Sun, 
+  Moon, 
+  Sparkles, 
+  ClipboardList,
+  MapPin,
+  Flame
 } from 'lucide-react';
 
 export default function Navbar({ 
@@ -22,12 +24,14 @@ export default function Navbar({
   eventName, 
   eventLogo,
   stats, 
-  connectedOperators, 
   isOnline, 
   serverConnected,
+  isFirestore,
   soundEnabled, 
   setSoundEnabled,
   operatorName,
+  puntoAcceso,
+  onOpenPuntoModal,
   isAdmin,
   onOpenAdminModal,
   onLogoutAdmin,
@@ -54,19 +58,35 @@ export default function Navbar({
             )}
 
             <div className="min-w-0">
-              <h1 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm sm:text-base leading-tight truncate max-w-[180px] sm:max-w-xs md:max-w-md">
-                {eventName || 'Acreditación de Evento'}
+              <h1 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm sm:text-base leading-tight truncate max-w-[170px] sm:max-w-xs md:max-w-md">
+                {eventName || 'Acreditación de Eventos'}
               </h1>
-              <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 font-medium">
-                <span className={`inline-block w-1.5 h-1.5 rounded-full ${isAdmin ? 'bg-indigo-500' : 'bg-emerald-500'}`} />
-                <span className="truncate">{isAdmin ? 'Panel de Administración' : `${operatorName}`}</span>
+              
+              {/* Información de Rol y Punto de Acceso */}
+              <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 font-medium truncate">
+                {isAdmin ? (
+                  <span className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-bold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                    Panel Administrador
+                  </span>
+                ) : (
+                  <button
+                    onClick={onOpenPuntoModal}
+                    className="flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400 transition group"
+                    title="Hacé clic para cambiar de puerta o nombre de operador"
+                  >
+                    <MapPin className="w-3 h-3 text-emerald-600 shrink-0 group-hover:scale-110 transition" />
+                    <span className="truncate underline decoration-dotted">{puntoAcceso || 'Puerta 1'}</span>
+                    <span className="text-[10px] text-zinc-400 font-normal">({operatorName})</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>
 
           {/* Navegación por Pestañas (Solo visible en modo Administrador) */}
           {isAdmin ? (
-            <nav className="hidden lg:flex items-center bg-zinc-100 dark:bg-zinc-800/70 p-1 rounded-lg border border-zinc-200 dark:border-zinc-700/60 text-xs font-semibold">
+            <nav className="hidden xl:flex items-center bg-zinc-100 dark:bg-zinc-800/70 p-1 rounded-lg border border-zinc-200 dark:border-zinc-700/60 text-xs font-semibold">
               <button
                 onClick={() => setCurrentTab('operator')}
                 className={`px-3 py-1.5 rounded-md transition ${
@@ -76,6 +96,16 @@ export default function Navbar({
                 }`}
               >
                 Vista Puerta
+              </button>
+              <button
+                onClick={() => setCurrentTab('stats')}
+                className={`px-3 py-1.5 rounded-md transition ${
+                  currentTab === 'stats'
+                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+              >
+                Métricas en Vivo
               </button>
               <button
                 onClick={() => setCurrentTab('datasource')}
@@ -88,14 +118,15 @@ export default function Navbar({
                 Fuente de Datos
               </button>
               <button
-                onClick={() => setCurrentTab('stats')}
-                className={`px-3 py-1.5 rounded-md transition ${
-                  currentTab === 'stats'
+                onClick={() => setCurrentTab('firebase')}
+                className={`px-3 py-1.5 rounded-md transition flex items-center gap-1 ${
+                  currentTab === 'firebase'
                     ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
                 }`}
               >
-                Métricas y Exportar
+                <Flame className="w-3.5 h-3.5 text-amber-500" />
+                <span>Firebase Cloud</span>
               </button>
               <button
                 onClick={() => setCurrentTab('settings')}
@@ -105,7 +136,7 @@ export default function Navbar({
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
                 }`}
               >
-                Campos y Filtros
+                Campos
               </button>
               <button
                 onClick={() => setCurrentTab('branding')}
@@ -132,13 +163,43 @@ export default function Navbar({
             /* Vista Operador: Contador conciso en el header */
             <div className="hidden sm:flex items-center space-x-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400">
               <span className="font-mono text-zinc-900 dark:text-zinc-100 font-bold bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700">
-                {stats.accredited} / {stats.total} acreditados ({stats.rate}%)
+                {stats.accredited} / {stats.total} ingresados ({stats.rate}%)
               </span>
             </div>
           )}
 
           {/* Acciones de la derecha: Tema, Sonido, Conexión y Rol */}
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1.5 sm:space-x-2">
+            
+            {/* Indicador de conexión / Firebase en tiempo real */}
+            <div 
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border flex items-center gap-1.5 ${
+                isOnline && isFirestore
+                  ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800'
+                  : isOnline && serverConnected
+                  ? 'text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800'
+                  : !isOnline
+                  ? 'text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900'
+                  : 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800'
+              }`}
+              title={
+                !isOnline 
+                  ? 'Sin conexión a internet' 
+                  : isFirestore 
+                  ? 'Sincronización en vivo con Cloud Firestore activa' 
+                  : serverConnected 
+                  ? 'Conectado a servidor local' 
+                  : 'Modo local sin base en tiempo real'
+              }
+            >
+              <span className={`w-2 h-2 rounded-full shrink-0 ${
+                isOnline && (isFirestore || serverConnected) ? 'bg-emerald-500 animate-pulse' : !isOnline ? 'bg-rose-500' : 'bg-amber-500'
+              }`} />
+              <span className="hidden md:inline font-mono text-[11px]">
+                {!isOnline ? 'Sin internet' : isFirestore ? 'En vivo (Cloud)' : serverConnected ? 'En línea' : 'Local'}
+              </span>
+            </div>
+
             {/* Toggle Modo Oscuro */}
             <button
               onClick={onToggleTheme}
@@ -160,18 +221,6 @@ export default function Navbar({
             >
               {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
             </button>
-
-            {/* Indicador de conexión */}
-            <div 
-              className={`p-2 rounded-lg text-xs border ${
-                serverConnected && isOnline
-                  ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/50'
-                  : 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900/50'
-              }`}
-              title={serverConnected ? `En línea con ${connectedOperators} operador(es)` : 'Modo local sin servidor'}
-            >
-              {isOnline ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
-            </div>
 
             {/* Botón de Rol: Entrar a Admin o Salir */}
             {isAdmin ? (
@@ -199,35 +248,44 @@ export default function Navbar({
 
         {/* Barra secundaria en móviles para Admin */}
         {isAdmin && (
-          <div className="lg:hidden flex items-center overflow-x-auto py-2 space-x-2 border-t border-zinc-100 dark:border-zinc-800 text-xs font-medium no-scrollbar">
+          <div className="xl:hidden flex items-center overflow-x-auto py-2 space-x-2 border-t border-zinc-100 dark:border-zinc-800 text-xs font-medium no-scrollbar">
             <button
               onClick={() => setCurrentTab('operator')}
               className={`px-2.5 py-1 rounded-md shrink-0 ${
-                currentTab === 'operator' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400'
+                currentTab === 'operator' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
               }`}
             >
               Puerta
             </button>
             <button
+              onClick={() => setCurrentTab('stats')}
+              className={`px-2.5 py-1 rounded-md shrink-0 ${
+                currentTab === 'stats' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
+              }`}
+            >
+              Métricas en Vivo
+            </button>
+            <button
               onClick={() => setCurrentTab('datasource')}
               className={`px-2.5 py-1 rounded-md shrink-0 ${
-                currentTab === 'datasource' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400'
+                currentTab === 'datasource' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
               }`}
             >
               Datos
             </button>
             <button
-              onClick={() => setCurrentTab('stats')}
-              className={`px-2.5 py-1 rounded-md shrink-0 ${
-                currentTab === 'stats' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400'
+              onClick={() => setCurrentTab('firebase')}
+              className={`px-2.5 py-1 rounded-md shrink-0 flex items-center gap-1 ${
+                currentTab === 'firebase' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
               }`}
             >
-              Métricas
+              <Flame className="w-3 h-3 text-amber-500" />
+              <span>Firebase</span>
             </button>
             <button
               onClick={() => setCurrentTab('settings')}
               className={`px-2.5 py-1 rounded-md shrink-0 ${
-                currentTab === 'settings' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400'
+                currentTab === 'settings' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
               }`}
             >
               Campos
@@ -235,7 +293,7 @@ export default function Navbar({
             <button
               onClick={() => setCurrentTab('branding')}
               className={`px-2.5 py-1 rounded-md shrink-0 ${
-                currentTab === 'branding' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400'
+                currentTab === 'branding' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
               }`}
             >
               Logo
@@ -243,7 +301,7 @@ export default function Navbar({
             <button
               onClick={() => setCurrentTab('audit')}
               className={`px-2.5 py-1 rounded-md shrink-0 ${
-                currentTab === 'audit' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400'
+                currentTab === 'audit' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold' : 'text-zinc-600 dark:text-zinc-400'
               }`}
             >
               Auditoría

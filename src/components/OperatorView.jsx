@@ -26,11 +26,13 @@ export default function OperatorView({
   onManualSync,
   isSyncing,
   autoClearSearch = true,
+  isOnline = true,
 }) {
   const [query, setQuery] = useState('');
   const [selectedFilterValue, setSelectedFilterValue] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'PENDING' | 'ACCREDITED'
-  const [justAccredited, setJustAccredited] = useState(null); // Feedback prominente
+  const [justAccredited, setJustAccredited] = useState(null); // Feedback prominente de éxito
+  const [collisionAlert, setCollisionAlert] = useState(null); // Alerta si otro operador ya lo acreditó casi a la vez
   const [recentAccreditations, setRecentAccreditations] = useState([]);
   const [showUndoModal, setShowUndoModal] = useState(null);
   const [showRecentMobile, setShowRecentMobile] = useState(false);
@@ -116,41 +118,54 @@ export default function OperatorView({
       return false;
     }).sort((a, b) => {
       const cleanQ = normalize(query);
-      // Coincidencia exacta de DNI va primera
       if (normalize(a.dni) === cleanQ) return -1;
       if (normalize(b.dni) === cleanQ) return 1;
-      // Pendientes antes que ya acreditados
       if (!a.acreditado && b.acreditado) return -1;
       if (a.acreditado && !b.acreditado) return 1;
       return 0;
     });
   }, [attendees, query, selectedFilterValue, statusFilter, config]);
 
-  // Manejar acreditación con feedback sonoro y visual contundente
+  // Manejar acreditación con resolución atómica de concurrencia
   const handleAccreditAction = async (attendee) => {
-    const result = await onAccredit(attendee.dni);
-    if (result && result.success) {
-      const nowIso = new Date().toISOString();
-      const accreditedRecord = {
-        ...attendee,
-        acreditado: true,
-        fechaAcreditacion: nowIso,
-      };
+    setCollisionAlert(null);
+    try {
+      const result = await onAccredit(attendee.dni);
+      if (result && result.success) {
+        const nowIso = new Date().toISOString();
+        const accreditedRecord = {
+          ...attendee,
+          acreditado: true,
+          fechaAcreditacion: nowIso,
+          puntoAcceso: result.attendee?.puntoAcceso || attendee.puntoAcceso,
+          operador: result.attendee?.operador || attendee.operador,
+        };
 
-      setJustAccredited(accreditedRecord);
-      setRecentAccreditations((prev) => [
-        accreditedRecord,
-        ...prev.filter((p) => p.dni !== attendee.dni).slice(0, 9),
-      ]);
+        setJustAccredited(accreditedRecord);
+        setRecentAccreditations((prev) => [
+          accreditedRecord,
+          ...prev.filter((p) => p.dni !== attendee.dni).slice(0, 9),
+        ]);
 
-      if (autoClearSearch) {
-        setQuery('');
+        if (autoClearSearch) {
+          setQuery('');
+        }
+
+        setTimeout(() => {
+          searchInputRef.current?.focus();
+        }, 50);
+      } else if (result && result.alreadyAccredited) {
+        // Conflicto de doble acreditación concurrente detectado por la base de datos
+        setCollisionAlert({
+          attendee: result.attendee || attendee,
+          error: result.error || 'Este asistente ya fue acreditado desde otro punto de acceso.',
+        });
       }
-
-      // Regresar foco inmediato al buscador
-      setTimeout(() => {
-        searchInputRef.current?.focus();
-      }, 50);
+    } catch (err) {
+      setCollisionAlert({
+        attendee,
+        error: err.message || 'Error al intentar confirmar la acreditación.',
+      });
     }
   };
 
@@ -249,6 +264,49 @@ export default function OperatorView({
           >
             <X className="w-5 h-5" />
           </button>
+        </div>
+      )}
+
+      {/* ================= BANNER DE ALERTA DE CONFLICTO / DOBLE ACREDITACIÓN ================= */}
+      {collisionAlert && (
+        <div 
+          role="alert"
+          className="bg-amber-600 text-white rounded-xl p-4 sm:p-5 shadow-lg shadow-amber-900/10 flex items-center justify-between gap-4 border border-amber-500 animate-in fade-in zoom-in-95 duration-200"
+        >
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-12 h-12 rounded-lg bg-white/15 border border-white/20 flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-7 h-7 text-white" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-xs font-bold tracking-wider uppercase bg-white/20 px-2 py-0.5 rounded font-mono">
+                YA ACREDITADO EN OTRO ACCESO
+              </span>
+              <h4 className="text-base sm:text-lg font-bold truncate mt-0.5">
+                {collisionAlert.attendee?.nombre} {collisionAlert.attendee?.apellido} (DNI: {collisionAlert.attendee?.dni})
+              </h4>
+              <p className="text-xs sm:text-sm opacity-95 mt-0.5">
+                {collisionAlert.error}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setCollisionAlert(null)}
+            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition shrink-0"
+            title="Entendido"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      )}
+
+      {/* ================= ALERTA DE MODO OFFLINE ================= */}
+      {!isOnline && (
+        <div className="bg-rose-600 text-white rounded-xl p-3 sm:p-4 shadow-sm flex items-center justify-between gap-3 text-xs sm:text-sm font-semibold">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 shrink-0" />
+            <span>Sin conexión a internet. Podés consultar la lista de asistentes pero la confirmación de ingresos está pausada para evitar ingresos duplicados.</span>
+          </div>
         </div>
       )}
 
@@ -579,13 +637,21 @@ export default function OperatorView({
                     {!att.acreditado ? (
                       <button
                         onClick={() => handleAccreditAction(att)}
-                        className="w-full sm:w-44 h-12 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white font-bold text-sm sm:text-base shadow-sm transition flex items-center justify-center gap-2"
+                        disabled={!isOnline}
+                        className={`w-full sm:w-44 h-12 rounded-lg text-white font-bold text-sm sm:text-base shadow-sm transition flex items-center justify-center gap-2 ${
+                          !isOnline
+                            ? 'bg-zinc-400 dark:bg-zinc-700 cursor-not-allowed opacity-60'
+                            : 'bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99]'
+                        }`}
+                        title={!isOnline ? 'Reconecta a internet para confirmar la acreditación' : 'Confirmar acreditación'}
                       >
                         <UserCheck className="w-5 h-5 stroke-[2.5]" />
-                        <span>Acreditar</span>
-                        <span className="hidden sm:inline-block text-[10px] bg-emerald-700/80 px-1 py-0.5 rounded font-mono font-normal">
-                          ↵
-                        </span>
+                        <span>{!isOnline ? 'Sin conexión' : 'Acreditar'}</span>
+                        {isOnline && (
+                          <span className="hidden sm:inline-block text-[10px] bg-emerald-700/80 px-1 py-0.5 rounded font-mono font-normal">
+                            ↵
+                          </span>
+                        )}
                       </button>
                     ) : (
                       <div className="flex flex-col gap-1.5 w-full sm:w-44">

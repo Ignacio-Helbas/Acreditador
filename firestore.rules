@@ -1,0 +1,233 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Este archivo de reglas de seguridad asume la siguiente estructura de datos
+// para la plataforma de acreditación de eventos en tiempo real:
+//
+// 1. Colección Raíz: events/{eventId}
+//    Document ID: Identificador del evento (ej: 'main-event', alfanumérico + guiones, 1-64 caracteres).
+//    Campos:
+//      - name: string (opcional, 1..150 caracteres) - Nombre público o título del evento.
+//      - logo: string | null (opcional, hasta 500.000 caracteres para data URL o URL externa) - Logo del evento.
+//      - config: map (opcional, hasta 50 claves) - Configuración general (columnas visibles, etiquetas, etc.).
+//      - lastUpdated: string (opcional, hasta 50 caracteres) - Marca temporal ISO de última sincronización.
+//      - lastSyncSource: string (opcional, hasta 50 caracteres) - Origen de datos ('excel', 'google-sheets', etc.).
+//      - totalAttendees: int (opcional, >= 0 y <= 1.000.000) - Cantidad total de asistentes registrados.
+//      - updatedAt: timestamp (opcional) - Fecha/hora del servidor de última modificación.
+//      - createdAt: timestamp (opcional) - Fecha/hora del servidor de creación del evento.
+//
+// 2. Subcolección: events/{eventId}/attendees/{dni}
+//    Document ID: DNI o documento normalizado del asistente (ej: '38123456', 1-40 caracteres).
+//    Campos:
+//      - dni: string (obligatorio, 1..40 caracteres) - Identificador del asistente, debe coincidir con el ID del documento. Inmutable para operadores.
+//      - nombre: string (opcional, hasta 120 caracteres) - Nombre de pila. Inmutable para operadores.
+//      - apellido: string (opcional, hasta 120 caracteres) - Apellido. Inmutable para operadores.
+//      - nombreCompleto: string (opcional, hasta 240 caracteres) - Nombre completo para visualización. Inmutable para operadores.
+//      - dynamicFields: map (opcional, hasta 50 entradas) - Datos adicionales (empresa, cargo, tipoEntrada, mesa, etc.). Inmutable para operadores.
+//      - acreditado: bool (obligatorio) - Estado actual de acreditación (true: ingresó, false: pendiente).
+//      - fechaAcreditacion: string | null (opcional, ISO 8601 o null, hasta 50 caracteres) - Momento exacto del ingreso.
+//      - operador: string | null (opcional, hasta 120 caracteres) - Nombre o identificación del operador que acreditó.
+//      - puntoAcceso: string | null (opcional, hasta 100 caracteres) - Puerta o terminal de acceso (ej: 'Puerta 1').
+//      - updatedAt: timestamp (opcional) - Timestamp de actualización en Firestore.
+//      - createdAt: timestamp (opcional) - Timestamp de creación inicial del registro.
+//      - id: string (opcional, hasta 50 caracteres) - Identificador interno opcional.
+//      - rawRow: map (opcional, hasta 50 claves) - Registro crudo de importación.
+//
+// 3. Subcolección: events/{eventId}/activity_feed/{feedId}
+//    Document ID: ID generado automáticamente (auto-ID, 1-64 caracteres).
+//    Campos:
+//      - dni: string (obligatorio, 1..40 caracteres) - DNI del asistente vinculado a la acción.
+//      - action: string (obligatorio, valores permitidos: 'ACCREDIT' o 'UNDO') - Tipo de acción.
+//      - operador: string (obligatorio, 1..120 caracteres) - Operador o terminal responsable.
+//      - puntoAcceso: string (obligatorio, 1..100 caracteres) - Puerta o punto de acceso.
+//      - timestamp: string (obligatorio, 1..50 caracteres) - Timestamp ISO de la acción para ordenamiento.
+//      - nombre: string (opcional, hasta 120 caracteres) - Nombre del asistente para feed visual.
+//      - apellido: string (opcional, hasta 120 caracteres) - Apellido del asistente.
+//      - createdAt: timestamp (opcional) - Timestamp de servidor para ordenamiento y consistencia.
+//    Invariante: Colección append-only (solo creación; actualización y borrado estrictamente prohibidos).
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Denegación por Defecto (Default Deny)
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Funciones Auxiliares Generales (Helpers)
+    // ===============================================================
+
+    // Verifica si la solicitud proviene de un usuario autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Verifica si el usuario posee privilegios de Administrador mediante Custom Claims
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.admin == true ||
+        request.auth.token.role == 'admin'
+      );
+    }
+
+    // Verifica si la solicitud proviene de un Operador autorizado de puerta.
+    // Por defecto requiere sesión activa (por ejemplo, Anonymous Auth en terminales de puerta o cuentas de staff).
+    function isOperator() {
+      return isAuthenticated();
+    }
+
+    // Valida que el documento contenga únicamente las claves permitidas en el esquema
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // Valida que el documento contenga todas las claves requeridas
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // Valida que una lista de campos no haya sido alterada durante una actualización
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Validadores de Dominio (Domain Validators)
+    // ===============================================================
+
+    // Validador de Evento (events/{eventId})
+    function isValidEvent(data) {
+      let allowedKeys = [
+        'name', 'logo', 'config', 'lastUpdated', 
+        'lastSyncSource', 'totalAttendees', 'updatedAt', 'createdAt'
+      ];
+
+      return hasOnlyAllowedFields(allowedKeys) &&
+        (!('name' in data) || (data.name is string && data.name.size() > 0 && data.name.size() <= 150)) &&
+        (!('logo' in data) || data.logo == null || (data.logo is string && data.logo.size() <= 500000)) &&
+        (!('config' in data) || (data.config is map && data.config.size() <= 50)) &&
+        (!('lastUpdated' in data) || (data.lastUpdated is string && data.lastUpdated.size() <= 50)) &&
+        (!('lastSyncSource' in data) || (data.lastSyncSource is string && data.lastSyncSource.size() <= 50)) &&
+        (!('totalAttendees' in data) || (data.totalAttendees is int && data.totalAttendees >= 0 && data.totalAttendees <= 1000000)) &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp) &&
+        (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    // Validador de Asistente (events/{eventId}/attendees/{dni})
+    function isValidAttendee(data, docDni) {
+      let allowedKeys = [
+        'dni', 'nombre', 'apellido', 'nombreCompleto', 'dynamicFields',
+        'acreditado', 'fechaAcreditacion', 'operador', 'puntoAcceso',
+        'updatedAt', 'createdAt', 'id', 'rawRow'
+      ];
+
+      return hasOnlyAllowedFields(allowedKeys) &&
+        hasRequiredFields(['dni', 'acreditado']) &&
+        data.dni is string && data.dni.size() > 0 && data.dni.size() <= 40 &&
+        data.dni.toLower() == docDni.toLower() &&
+        data.acreditado is bool &&
+        (!('nombre' in data) || (data.nombre is string && data.nombre.size() <= 120)) &&
+        (!('apellido' in data) || (data.apellido is string && data.apellido.size() <= 120)) &&
+        (!('nombreCompleto' in data) || (data.nombreCompleto is string && data.nombreCompleto.size() <= 240)) &&
+        (!('dynamicFields' in data) || (data.dynamicFields is map && data.dynamicFields.size() <= 50)) &&
+        (!('fechaAcreditacion' in data) || data.fechaAcreditacion == null || (data.fechaAcreditacion is string && data.fechaAcreditacion.size() <= 50)) &&
+        (!('operador' in data) || data.operador == null || (data.operador is string && data.operador.size() <= 120)) &&
+        (!('puntoAcceso' in data) || data.puntoAcceso == null || (data.puntoAcceso is string && data.puntoAcceso.size() <= 100)) &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp) &&
+        (!('createdAt' in data) || data.createdAt is timestamp) &&
+        (!('id' in data) || (data.id is string && data.id.size() <= 50)) &&
+        (!('rawRow' in data) || (data.rawRow is map && data.rawRow.size() <= 50));
+    }
+
+    // Valida que el operador solo altere los campos estrictamente permitidos de acreditación
+    function isAllowedOperatorAttendeeUpdate() {
+      let allowedChangedKeys = ['acreditado', 'fechaAcreditacion', 'operador', 'puntoAcceso', 'updatedAt'];
+      let prohibitedKeys = ['dni', 'nombre', 'apellido', 'nombreCompleto', 'dynamicFields', 'createdAt', 'id', 'rawRow'];
+
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedChangedKeys) &&
+        areImmutableFieldsUnchanged(prohibitedKeys) &&
+        request.resource.data.dni == resource.data.dni;
+    }
+
+    // Validador de Eventos en el Feed de Actividad (events/{eventId}/activity_feed/{feedId})
+    function isValidActivityFeed(data) {
+      let allowedKeys = [
+        'dni', 'action', 'operador', 'puntoAcceso', 'timestamp',
+        'nombre', 'apellido', 'createdAt'
+      ];
+      let requiredKeys = ['dni', 'action', 'operador', 'puntoAcceso', 'timestamp'];
+
+      return hasOnlyAllowedFields(allowedKeys) &&
+        hasRequiredFields(requiredKeys) &&
+        data.dni is string && data.dni.size() > 0 && data.dni.size() <= 40 &&
+        data.action is string && data.action in ['ACCREDIT', 'UNDO'] &&
+        data.operador is string && data.operador.size() > 0 && data.operador.size() <= 120 &&
+        data.puntoAcceso is string && data.puntoAcceso.size() > 0 && data.puntoAcceso.size() <= 100 &&
+        data.timestamp is string && data.timestamp.size() > 0 && data.timestamp.size() <= 50 &&
+        (!('nombre' in data) || (data.nombre is string && data.nombre.size() <= 120)) &&
+        (!('apellido' in data) || (data.apellido is string && data.apellido.size() <= 120)) &&
+        (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    // ===============================================================
+    // Reglas para la Colección Raíz: events/{eventId}
+    // ===============================================================
+    match /events/{eventId} {
+      // Lectura permitida para operadores y administradores
+      allow read: if isOperator() || isAdmin();
+
+      // Creación, actualización y borrado reservados exclusivamente a Administradores
+      allow create: if isAdmin() && isValidEvent(request.resource.data);
+      allow update: if isAdmin() && isValidEvent(request.resource.data);
+      allow delete: if isAdmin();
+
+      // =============================================================
+      // Subcolección: attendees (Asistentes)
+      // =============================================================
+      match /attendees/{dni} {
+        // Lectura permitida para todos los operadores de puerta y administradores
+        allow read: if isOperator() || isAdmin();
+
+        // Creación y borrado reservados estrictamente a Administradores (ej: cargas masivas o depuración)
+        allow create: if isAdmin() && isValidAttendee(request.resource.data, dni);
+        allow delete: if isAdmin();
+
+        // Actualización:
+        // - Administradores: pueden actualizar cualquier campo válido respetando inmutabilidad del DNI y createdAt
+        // - Operadores: únicamente pueden cambiar estado de acreditación (acreditado, fechaAcreditacion, operador, puntoAcceso, updatedAt)
+        allow update: if (
+          isAdmin() &&
+          isValidAttendee(request.resource.data, dni) &&
+          request.resource.data.dni == resource.data.dni &&
+          (!('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt)
+        ) || (
+          isOperator() &&
+          isAllowedOperatorAttendeeUpdate() &&
+          isValidAttendee(request.resource.data, dni)
+        );
+      }
+
+      // =============================================================
+      // Subcolección: activity_feed (Feed de Actividad en Tiempo Real)
+      // =============================================================
+      match /activity_feed/{feedId} {
+        // Lectura permitida para monitoreo en vivo (panel de admin / terminales)
+        allow read: if isOperator() || isAdmin();
+
+        // Creación permitida para operadores y administradores con validación rigurosa de campos requeridos
+        allow create: if (isOperator() || isAdmin()) && isValidActivityFeed(request.resource.data);
+
+        // Actualización y borrado PROHIBIDOS para garantizar la inmutabilidad y la pista de auditoría
+        allow update, delete: if false;
+      }
+    }
+  }
+}

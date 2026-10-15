@@ -6,7 +6,9 @@ import SettingsView from './components/SettingsView';
 import StatsView from './components/StatsView';
 import BrandingSettingsView from './components/BrandingSettingsView';
 import AuditLogsView from './components/AuditLogsView';
+import FirebaseSettingsView from './components/FirebaseSettingsView';
 import AdminPinModal from './components/AdminPinModal';
+import PuntoAccesoModal from './components/PuntoAccesoModal';
 import LoadingScreen from './components/LoadingScreen';
 import { apiService } from './services/api';
 import { playSuccessSound, playWarningSound } from './utils/sound';
@@ -16,6 +18,7 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState('operator');
   const [isAdmin, setIsAdmin] = useState(() => apiService.isAdmin());
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [isPuntoModalOpen, setIsPuntoModalOpen] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   // Información del Evento
@@ -48,6 +51,11 @@ export default function App() {
   const [connectedOperators, setConnectedOperators] = useState(1);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [serverConnected, setServerConnected] = useState(false);
+  const [isFirestore, setIsFirestore] = useState(() => apiService.isFirestore());
+
+  // Punto de Acceso y Operador
+  const [puntoAcceso, setPuntoAccesoState] = useState(() => apiService.getPuntoAcceso());
+  const [operatorName, setOperatorNameState] = useState(() => apiService.getOperatorName());
 
   // Modo Oscuro con persistencia en localStorage y detección de preferencia de sistema
   const [isDark, setIsDark] = useState(() => {
@@ -73,9 +81,6 @@ export default function App() {
   const [autoClearSearch, setAutoClearSearch] = useState(() => {
     return localStorage.getItem('acreditador_autoclear') !== 'false';
   });
-  const [operatorName, setOperatorName] = useState(() => {
-    return localStorage.getItem('acreditador_operator_name') || 'Operador Puerta 1';
-  });
 
   useEffect(() => {
     localStorage.setItem('acreditador_sound', soundEnabled);
@@ -85,16 +90,21 @@ export default function App() {
     localStorage.setItem('acreditador_autoclear', autoClearSearch);
   }, [autoClearSearch]);
 
-  const handleSetOperatorName = (name) => {
-    setOperatorName(name);
-    apiService.setOperatorName(name);
+  const handleSavePunto = (punto) => {
+    apiService.setPuntoAcceso(punto);
+    setPuntoAccesoState(punto);
   };
 
-  // Carga inicial y conexión con WebSocket / Backend
+  const handleSaveOperator = (name) => {
+    apiService.setOperatorName(name);
+    setOperatorNameState(name);
+  };
+
+  // Carga inicial y conexión con WebSocket / Firestore / Backend
   useEffect(() => {
     let isMounted = true;
 
-    // 1. Obtener estado inicial desde el servidor o localStorage
+    // 1. Obtener estado inicial
     apiService.getInitialState().then(({ data, connectedOperators: ops }) => {
       if (!isMounted || !data) {
         setIsInitialLoading(false);
@@ -108,7 +118,6 @@ export default function App() {
       if (data.lastSyncSource) setLastSyncSource(data.lastSyncSource);
       if (ops) setConnectedOperators(ops);
 
-      // Breve pausa para dar una bienvenida visual armónica
       setTimeout(() => {
         if (isMounted) setIsInitialLoading(false);
       }, 400);
@@ -116,8 +125,9 @@ export default function App() {
       if (isMounted) setIsInitialLoading(false);
     });
 
-    // 2. Conectar WebSocket para sincronización en vivo
+    // 2. Conectar listeners en vivo (Firestore o WebSocket)
     apiService.connectWebSocket();
+    setIsFirestore(apiService.isFirestore());
 
     // 3. Suscribirse a eventos en tiempo real
     const unsubscribe = apiService.subscribe((msg) => {
@@ -181,6 +191,11 @@ export default function App() {
 
         case 'SERVER_STATUS':
           setServerConnected(msg.connected);
+          if (msg.mode === 'firestore') setIsFirestore(true);
+          break;
+
+        case 'PUNTO_ACCESO_CHANGED':
+          if (msg.puntoAcceso) setPuntoAccesoState(msg.puntoAcceso);
           break;
 
         default:
@@ -250,7 +265,7 @@ export default function App() {
       }
     } catch (err) {
       if (soundEnabled) playWarningSound();
-      console.error('Error al acreditar:', err);
+      throw err;
     }
   };
 
@@ -261,6 +276,7 @@ export default function App() {
       return res;
     } catch (err) {
       console.error('Error al desacreditar:', err);
+      throw err;
     }
   };
 
@@ -335,7 +351,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200">
       
-      {/* Barra Superior con Logo, Nombre, Rol y Selector de Pestañas */}
+      {/* Barra Superior con Logo, Nombre, Rol, Punto de Acceso y Estado En Vivo */}
       <Navbar
         currentTab={currentTab}
         setCurrentTab={handleSelectTab}
@@ -345,9 +361,12 @@ export default function App() {
         connectedOperators={connectedOperators}
         isOnline={isOnline}
         serverConnected={serverConnected}
+        isFirestore={isFirestore}
         soundEnabled={soundEnabled}
         setSoundEnabled={setSoundEnabled}
         operatorName={operatorName}
+        puntoAcceso={puntoAcceso}
+        onOpenPuntoModal={() => setIsPuntoModalOpen(true)}
         isAdmin={isAdmin}
         onOpenAdminModal={() => setIsAdminModalOpen(true)}
         onLogoutAdmin={handleLogoutAdmin}
@@ -369,10 +388,21 @@ export default function App() {
             onManualSync={config.googleSheetUrl ? triggerBackgroundSheetSync : null}
             isSyncing={isSyncing}
             autoClearSearch={autoClearSearch}
+            isOnline={isOnline}
           />
         )}
 
         {/* Vistas de Administración: NUNCA se renderizan si no está autenticado */}
+        {isAdmin && currentTab === 'stats' && (
+          <StatsView
+            attendees={attendees}
+            config={config}
+            eventName={eventName}
+            onResetAccreditations={handleResetAccreditations}
+            onToggleAccredit={(dni, acc) => apiService.accredit(dni, acc)}
+          />
+        )}
+
         {isAdmin && currentTab === 'datasource' && (
           <DataSourceView
             onSyncAttendees={handleSyncAttendees}
@@ -386,14 +416,8 @@ export default function App() {
           />
         )}
 
-        {isAdmin && currentTab === 'stats' && (
-          <StatsView
-            attendees={attendees}
-            config={config}
-            eventName={eventName}
-            onResetAccreditations={handleResetAccreditations}
-            onToggleAccredit={(dni, acc) => apiService.accredit(dni, acc)}
-          />
+        {isAdmin && currentTab === 'firebase' && (
+          <FirebaseSettingsView />
         )}
 
         {isAdmin && currentTab === 'settings' && (
@@ -402,7 +426,7 @@ export default function App() {
             onSaveConfig={handleSaveConfig}
             attendees={attendees}
             operatorName={operatorName}
-            setOperatorName={handleSetOperatorName}
+            setOperatorName={handleSaveOperator}
             soundEnabled={soundEnabled}
             setSoundEnabled={setSoundEnabled}
             autoClearSearch={autoClearSearch}
@@ -430,6 +454,16 @@ export default function App() {
         isOpen={isAdminModalOpen}
         onClose={() => setIsAdminModalOpen(false)}
         onVerifyPin={handleVerifyPin}
+      />
+
+      {/* Modal de Asignación de Punto de Acceso y Operador */}
+      <PuntoAccesoModal
+        isOpen={isPuntoModalOpen}
+        onClose={() => setIsPuntoModalOpen(false)}
+        currentPunto={puntoAcceso}
+        onSavePunto={handleSavePunto}
+        currentOperator={operatorName}
+        onSaveOperator={handleSaveOperator}
       />
     </div>
   );

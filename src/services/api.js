@@ -1,8 +1,25 @@
-// Servicio de comunicación y sincronización en tiempo real (WebSocket + REST + Offline Fallback)
+// Servicio de comunicación y sincronización en tiempo real (Firebase Firestore + WebSocket + Fallback)
+import { 
+  initFirebase, 
+  isFirebaseConfigured, 
+  subscribeToAttendees as subscribeFirestoreAttendees,
+  subscribeToEvent as subscribeFirestoreEvent,
+  subscribeToActivityFeed as subscribeFirestoreFeed,
+  accreditAttendeeTransaction,
+  undoAccreditationTransaction,
+  syncAttendeesToFirestore,
+  saveEventConfigToFirestore,
+  saveEventBrandingToFirestore,
+  resetAllAccreditationsInFirestore,
+  saveFirebaseConfig,
+  getFirebaseConfig
+} from './firebase';
 
 const LOCAL_STORAGE_KEY = 'acreditador_event_state';
-const OFFLINE_QUEUE_KEY = 'acreditador_offline_queue';
 const ADMIN_PIN_KEY = 'acreditador_admin_pin';
+const PUNTO_ACCESO_KEY = 'acreditador_punto_acceso';
+const OPERATOR_NAME_KEY = 'acreditador_operator_name';
+const DEFAULT_EVENT_ID = 'main-event';
 
 class ApiService {
   constructor() {
@@ -11,22 +28,63 @@ class ApiService {
     this.reconnectTimer = null;
     this.isOnline = navigator.onLine;
     this.serverConnected = false;
-    this.operatorName = localStorage.getItem('acreditador_operator_name') || 'Operador Puerta 1';
+    this.isFirestoreActive = false;
+    this.unsubscribeFirestore = null;
+    this.unsubscribeEventFirestore = null;
+
+    this.puntoAcceso = localStorage.getItem(PUNTO_ACCESO_KEY) || 'Puerta 1';
+    this.operatorName = localStorage.getItem(OPERATOR_NAME_KEY) || 'Operador Puerta 1';
     this.adminPin = sessionStorage.getItem(ADMIN_PIN_KEY) || localStorage.getItem(ADMIN_PIN_KEY) || '';
 
-    // Manejo de eventos de conectividad del navegador
+    // Manejo de conectividad online/offline del navegador
     window.addEventListener('online', () => {
       this.isOnline = true;
-      this.connectWebSocket();
-      this.flushOfflineQueue();
       this.notifyListeners({ type: 'NETWORK_STATUS', online: true });
+      if (this.isFirestoreActive) {
+        this.notifyListeners({ type: 'SERVER_STATUS', connected: true, mode: 'firestore' });
+      } else {
+        this.connectWebSocket();
+      }
     });
 
     window.addEventListener('offline', () => {
       this.isOnline = false;
       this.serverConnected = false;
       this.notifyListeners({ type: 'NETWORK_STATUS', online: false });
+      this.notifyListeners({ type: 'SERVER_STATUS', connected: false });
     });
+
+    // Intentar inicializar Firebase si existe configuración
+    this.setupFirebaseIfAvailable();
+  }
+
+  setupFirebaseIfAvailable() {
+    if (isFirebaseConfigured()) {
+      const res = initFirebase();
+      if (res.initialized) {
+        this.isFirestoreActive = true;
+        this.serverConnected = true;
+      }
+    }
+  }
+
+  setPuntoAcceso(punto) {
+    this.puntoAcceso = punto;
+    localStorage.setItem(PUNTO_ACCESO_KEY, punto);
+    this.notifyListeners({ type: 'PUNTO_ACCESO_CHANGED', puntoAcceso: punto });
+  }
+
+  getPuntoAcceso() {
+    return this.puntoAcceso;
+  }
+
+  setOperatorName(name) {
+    this.operatorName = name;
+    localStorage.setItem(OPERATOR_NAME_KEY, name);
+  }
+
+  getOperatorName() {
+    return this.operatorName;
   }
 
   setAdminPin(pin) {
@@ -48,7 +106,8 @@ class ApiService {
   }
 
   async verifyAdminPin(pin) {
-    if (this.serverConnected && this.isOnline) {
+    // Si hay backend Node.js activo, validar ahí
+    if (this.serverConnected && !this.isFirestoreActive && this.isOnline) {
       try {
         const res = await fetch('/api/auth/verify-pin', {
           method: 'POST',
@@ -65,7 +124,7 @@ class ApiService {
       }
     }
 
-    // Validación offline
+    // Validación local / Firestore
     const local = this.getLocalState();
     const expected = local.config?.adminPin || '1234';
     if (String(pin).trim() === String(expected).trim()) {
@@ -78,15 +137,6 @@ class ApiService {
   logoutAdmin() {
     this.setAdminPin('');
     this.notifyListeners({ type: 'ADMIN_LOGOUT' });
-  }
-
-  setOperatorName(name) {
-    this.operatorName = name;
-    localStorage.setItem('acreditador_operator_name', name);
-  }
-
-  getOperatorName() {
-    return this.operatorName;
   }
 
   subscribe(callback) {
@@ -104,15 +154,99 @@ class ApiService {
     });
   }
 
-  // Inicializa la conexión WebSocket para multi-operador (si hay servidor Node disponible)
+  // Configurar Firebase desde la UI
+  setFirebaseConfig(config) {
+    saveFirebaseConfig(config);
+    const res = initFirebase();
+    if (res.initialized) {
+      this.isFirestoreActive = true;
+      this.serverConnected = true;
+      this.attachFirestoreListeners();
+      this.notifyListeners({ type: 'SERVER_STATUS', connected: true, mode: 'firestore' });
+      return { success: true };
+    }
+    return { success: false, error: res.error };
+  }
+
+  getFirebaseConfig() {
+    return getFirebaseConfig();
+  }
+
+  isFirestore() {
+    return this.isFirestoreActive;
+  }
+
+  // Activar listeners en tiempo real de Firestore
+  attachFirestoreListeners() {
+    if (!this.isFirestoreActive) return;
+
+    if (this.unsubscribeFirestore) this.unsubscribeFirestore();
+    if (this.unsubscribeEventFirestore) this.unsubscribeEventFirestore();
+
+    // 1. Escuchar asistentes en tiempo real
+    this.unsubscribeFirestore = subscribeFirestoreAttendees(
+      DEFAULT_EVENT_ID,
+      (attendees) => {
+        const local = this.getLocalState();
+        local.attendees = attendees;
+        local.lastUpdated = new Date().toISOString();
+        this.saveLocalState(local);
+
+        this.notifyListeners({
+          type: 'EVENT_SYNCED',
+          data: {
+            attendees,
+            lastUpdated: local.lastUpdated,
+            lastSyncSource: 'firestore',
+          },
+        });
+      },
+      (err) => {
+        console.warn('Error en suscripción Firestore:', err);
+      }
+    );
+
+    // 2. Escuchar cambios de configuración del evento
+    this.unsubscribeEventFirestore = subscribeFirestoreEvent(
+      DEFAULT_EVENT_ID,
+      (eventData) => {
+        if (!eventData) return;
+        const local = this.getLocalState();
+        if (eventData.name) local.eventName = eventData.name;
+        if (eventData.logo !== undefined) local.eventLogo = eventData.logo;
+        if (eventData.config) local.config = { ...local.config, ...eventData.config };
+        this.saveLocalState(local);
+
+        this.notifyListeners({
+          type: 'BRANDING_UPDATED',
+          eventName: eventData.name,
+          eventLogo: eventData.logo,
+        });
+
+        if (eventData.config) {
+          this.notifyListeners({
+            type: 'CONFIG_UPDATED',
+            config: eventData.config,
+            eventName: eventData.name,
+          });
+        }
+      }
+    );
+  }
+
+  // Conexión WebSocket para cuando corre con backend Node.js
   connectWebSocket() {
+    if (this.isFirestoreActive) {
+      this.attachFirestoreListeners();
+      this.notifyListeners({ type: 'SERVER_STATUS', connected: true, mode: 'firestore' });
+      return;
+    }
+
     if (typeof window === 'undefined') return;
 
-    // Detectar si estamos en un hosting estático web (GitHub Pages, Vercel, etc.)
     const hostname = window.location.hostname;
     const isStaticHost = hostname.includes('github.io') || hostname.includes('vercel.app') || window.location.protocol === 'file:';
     if (isStaticHost) {
-      // En GitHub Pages o hosting estático puro, la app funciona 100% web desde el navegador
       this.serverConnected = false;
       this.notifyListeners({ type: 'SERVER_STATUS', connected: true, mode: 'cloud' });
       return;
@@ -131,9 +265,7 @@ class ApiService {
 
       this.ws.onopen = () => {
         this.serverConnected = true;
-        this.reconnectAttempts = 0;
-        this.notifyListeners({ type: 'SERVER_STATUS', connected: true });
-        this.flushOfflineQueue();
+        this.notifyListeners({ type: 'SERVER_STATUS', connected: true, mode: 'websocket' });
       };
 
       this.ws.onmessage = (event) => {
@@ -152,13 +284,8 @@ class ApiService {
       this.ws.onclose = () => {
         this.serverConnected = false;
         this.notifyListeners({ type: 'SERVER_STATUS', connected: false });
-        
-        // Limitar reintentos para no spammear la consola si no hay servidor local
-        this.reconnectAttempts = (this.reconnectAttempts || 0) + 1;
-        if (this.reconnectAttempts <= 3) {
-          clearTimeout(this.reconnectTimer);
-          this.reconnectTimer = setTimeout(() => this.connectWebSocket(), 4000);
-        }
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = setTimeout(() => this.connectWebSocket(), 4000);
       };
 
       this.ws.onerror = () => {
@@ -171,6 +298,13 @@ class ApiService {
 
   // Carga inicial del estado
   async getInitialState() {
+    // Si Firestore está activo, activar listeners
+    if (this.isFirestoreActive) {
+      this.attachFirestoreListeners();
+      const local = this.getLocalState();
+      return { data: local, connectedOperators: 1 };
+    }
+
     try {
       const res = await fetch('/api/event');
       if (res.ok) {
@@ -180,7 +314,6 @@ class ApiService {
         return { data: json.data, connectedOperators: json.connectedOperators || 1 };
       }
     } catch (e) {
-      console.warn('Backend REST no disponible, usando almacenamiento local offline:', e.message);
       this.serverConnected = false;
     }
 
@@ -189,12 +322,28 @@ class ApiService {
     return { data: local, connectedOperators: 1 };
   }
 
-  // Acreditar asistente (con soporte offline si el servidor se desconecta)
+  // Acreditar asistente (Atómico en Firestore o Backend / Local)
   async accredit(dni, accredited = true) {
-    const operator = this.operatorName;
-    const now = new Date().toISOString();
+    const punto = this.puntoAcceso;
+    const operator = `${this.operatorName} (${punto})`;
 
-    // Si el servidor está conectado, intentar llamada REST
+    // 1. Si Firebase Firestore está conectado (Modo Real-Time Cloud compartido)
+    if (this.isFirestoreActive && this.isOnline) {
+      try {
+        if (accredited) {
+          const res = await accreditAttendeeTransaction(DEFAULT_EVENT_ID, dni, punto, operator);
+          return res;
+        } else {
+          const res = await undoAccreditationTransaction(DEFAULT_EVENT_ID, dni, punto, operator);
+          return res;
+        }
+      } catch (err) {
+        console.error('Error en transacción Firestore:', err);
+        throw err;
+      }
+    }
+
+    // 2. Si hay backend Node.js REST
     if (this.serverConnected && this.isOnline) {
       try {
         const res = await fetch('/api/event/accredit', {
@@ -207,7 +356,6 @@ class ApiService {
         if (res.ok && json.success) {
           return json;
         } else if (res.status === 409) {
-          // Ya acreditado
           return {
             success: false,
             alreadyAccredited: true,
@@ -216,11 +364,11 @@ class ApiService {
           };
         }
       } catch (err) {
-        console.warn('Error en llamada remota, procesando en modo offline:', err);
+        console.warn('Error en llamada remota:', err);
       }
     }
 
-    // Procesar localmente (Modo Offline)
+    // 3. Fallback Local
     const localState = this.getLocalState();
     const cleanDni = String(dni).trim().toLowerCase();
     const attendee = localState.attendees.find(
@@ -240,62 +388,50 @@ class ApiService {
       };
     }
 
+    const now = new Date().toISOString();
     attendee.acreditado = accredited;
     attendee.fechaAcreditacion = accredited ? now : null;
     attendee.operador = accredited ? operator : null;
+    attendee.puntoAcceso = accredited ? punto : null;
 
     localState.lastUpdated = now;
     this.saveLocalState(localState);
 
-    // Encolar acción para sincronizar al volver la conexión
-    this.enqueueOfflineAction({
-      action: 'ACCREDIT',
-      dni,
-      accredited,
-      operator,
-      timestamp: now,
-    });
-
-    // Notificar localmente
     this.notifyListeners({
       type: 'ACCREDITATION_UPDATED',
       attendee,
       lastUpdated: now,
-      isOfflineAction: true,
     });
 
-    return { success: true, attendee, isOffline: true };
+    return { success: true, attendee };
   }
 
-  // Sincronizar asistentes en lote (desde Excel o Sheets)
+  // Sincronizar nómina de asistentes en bloque
   async syncAttendees(attendees, source = 'manual', eventName) {
-    if (this.serverConnected && this.isOnline) {
-      try {
-        const res = await fetch('/api/event/sync', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'x-admin-pin': this.adminPin,
-          },
-          body: JSON.stringify({ attendees, source, eventName }),
-        });
-        if (res.ok) {
-          const json = await res.json();
-          return json;
-        } else if (res.status === 403) {
-          throw new Error('Se requiere PIN de Administrador para cargar o modificar la base de datos.');
-        }
-      } catch (err) {
-        console.warn('Error enviando sync al backend:', err);
-        throw err;
-      }
+    // Si Firestore está activo
+    if (this.isFirestoreActive && this.isOnline) {
+      const res = await syncAttendeesToFirestore(DEFAULT_EVENT_ID, attendees, source);
+      return res;
     }
 
-    // Modo Offline
+    // Si backend Node.js está disponible
+    if (this.serverConnected && this.isOnline) {
+      const res = await fetch('/api/event/sync', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-admin-pin': this.adminPin,
+        },
+        body: JSON.stringify({ attendees, source, eventName }),
+      });
+      if (res.ok) return await res.json();
+      if (res.status === 403) throw new Error('PIN de Administrador requerido.');
+    }
+
+    // Modo local
     const localState = this.getLocalState();
     if (eventName) localState.eventName = eventName;
 
-    // Merge manual
     const map = new Map();
     localState.attendees.forEach((a) => map.set(String(a.dni).trim().toLowerCase(), a));
 
@@ -314,6 +450,7 @@ class ApiService {
           acreditado: ex.acreditado || false,
           fechaAcreditacion: ex.fechaAcreditacion || null,
           operador: ex.operador || null,
+          puntoAcceso: ex.puntoAcceso || null,
         };
       } else {
         added++;
@@ -322,6 +459,7 @@ class ApiService {
           acreditado: false,
           fechaAcreditacion: null,
           operador: null,
+          puntoAcceso: null,
         };
       }
     });
@@ -338,129 +476,106 @@ class ApiService {
 
     return {
       success: true,
-      summary: { total: merged.length, added, updated, preservedAccreditations: preserved },
+      summary: {
+        total: merged.length,
+        added,
+        updated,
+        preservedAccreditations: preserved,
+      },
     };
   }
 
-  // Guardar configuración
-  async saveConfig(config, eventName) {
-    if (this.serverConnected && this.isOnline) {
+  // Guardar configuración general
+  async saveConfig(newConfig, eventName) {
+    if (this.isFirestoreActive && this.isOnline) {
+      await saveEventConfigToFirestore(DEFAULT_EVENT_ID, newConfig, eventName);
+    } else if (this.serverConnected && this.isOnline) {
       try {
-        const res = await fetch('/api/event/config', {
+        await fetch('/api/event/config', {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
             'x-admin-pin': this.adminPin,
           },
-          body: JSON.stringify({ config, eventName }),
+          body: JSON.stringify({ config: newConfig, eventName }),
         });
-        if (res.ok) return await res.json();
-        if (res.status === 403) {
-          throw new Error('Se requiere PIN de Administrador para guardar configuraciones.');
-        }
       } catch (e) {
-        console.warn('No se pudo guardar config en backend:', e);
+        console.warn('Error guardando config en backend:', e);
       }
     }
 
     const localState = this.getLocalState();
-    if (config) localState.config = { ...localState.config, ...config };
+    localState.config = newConfig;
     if (eventName) localState.eventName = eventName;
     this.saveLocalState(localState);
 
     this.notifyListeners({
       type: 'CONFIG_UPDATED',
-      config: localState.config,
-      eventName: localState.eventName,
+      config: newConfig,
+      eventName,
     });
-
-    return { success: true, config: localState.config };
   }
 
-  // Guardar personalización de marca (Nombre y Logo)
+  // Guardar marca y logo
   async saveBranding(eventName, eventLogo) {
-    if (this.serverConnected && this.isOnline) {
+    if (this.isFirestoreActive && this.isOnline) {
+      await saveEventBrandingToFirestore(DEFAULT_EVENT_ID, eventName, eventLogo);
+    } else if (this.serverConnected && this.isOnline) {
       try {
-        const res = await fetch('/api/admin/branding', {
+        await fetch('/api/admin/branding', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'x-admin-pin': this.adminPin,
           },
-          body: JSON.stringify({ eventName, eventLogo, operator: this.operatorName }),
+          body: JSON.stringify({ eventName, eventLogo }),
         });
-        if (res.ok) return await res.json();
-        if (res.status === 403) {
-          throw new Error('Se requiere PIN de Administrador para modificar la personalización.');
-        }
       } catch (e) {
-        console.warn('Error guardando personalización en backend:', e);
-        throw e;
+        console.warn('Error guardando branding en backend:', e);
       }
     }
 
     const localState = this.getLocalState();
-    if (eventName) localState.eventName = eventName;
-    if (eventLogo !== undefined) localState.eventLogo = eventLogo;
+    localState.eventName = eventName;
+    localState.eventLogo = eventLogo;
     this.saveLocalState(localState);
 
     this.notifyListeners({
       type: 'BRANDING_UPDATED',
-      eventName: localState.eventName,
-      eventLogo: localState.eventLogo,
+      eventName,
+      eventLogo,
     });
-
-    return { success: true, eventName: localState.eventName, eventLogo: localState.eventLogo };
   }
 
-  // Obtener logs de auditoría
-  async getAuditLogs() {
-    if (this.serverConnected && this.isOnline) {
-      try {
-        const res = await fetch('/api/admin/audit-logs', {
-          headers: {
-            'x-admin-pin': this.adminPin,
-          },
-        });
-        if (res.ok) {
-          const json = await res.json();
-          return json.auditLogs || [];
-        }
-      } catch (e) {
-        console.warn('Error obteniendo logs de auditoría:', e);
-      }
-    }
-    return this.getLocalState().auditLogs || [];
-  }
-
-  // Resetear acreditaciones
+  // Reiniciar acreditaciones a cero
   async resetAccreditations() {
+    if (this.isFirestoreActive && this.isOnline) {
+      await resetAllAccreditationsInFirestore(DEFAULT_EVENT_ID);
+      return;
+    }
+
     if (this.serverConnected && this.isOnline) {
       try {
-        const res = await fetch('/api/event/reset-accreditations', {
+        await fetch('/api/event/reset-accreditations', {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
             'x-admin-pin': this.adminPin,
           },
         });
-        if (res.ok) return await res.json();
-        if (res.status === 403) {
-          throw new Error('Se requiere PIN de Administrador para reiniciar el evento.');
-        }
       } catch (e) {
-        console.warn('Error reseteando en servidor:', e);
-        throw e;
+        console.warn('Error en reset backend:', e);
       }
     }
 
     const localState = this.getLocalState();
-    localState.attendees.forEach((a) => {
-      a.acreditado = false;
-      a.fechaAcreditacion = null;
-      a.operador = null;
-    });
-    localState.history = [];
+    localState.attendees = localState.attendees.map((a) => ({
+      ...a,
+      acreditado: false,
+      fechaAcreditacion: null,
+      operador: null,
+      puntoAcceso: null,
+    }));
     localState.lastUpdated = new Date().toISOString();
     this.saveLocalState(localState);
 
@@ -468,23 +583,19 @@ class ApiService {
       type: 'EVENT_RESET',
       data: localState,
     });
-
-    return { success: true };
   }
 
-  // Helpers de LocalStorage
   getLocalState() {
     try {
-      const data = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (data) return JSON.parse(data);
+      const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (raw) return JSON.parse(raw);
     } catch (e) {
       console.warn('Error leyendo local state:', e);
     }
     return {
-      eventName: 'Evento Principal',
+      eventName: 'Mi Evento 2026',
       eventLogo: null,
-      lastUpdated: new Date().toISOString(),
-      lastSyncSource: null,
+      attendees: [],
       config: {
         visibleFields: ['empresa', 'cargo', 'tipoEntrada', 'mesa'],
         fieldLabels: {
@@ -494,18 +605,17 @@ class ApiService {
           empresa: 'Empresa',
           cargo: 'Cargo',
           tipoEntrada: 'Tipo de Entrada',
-          mesa: 'Mesa / Ubicación',
+          mesa: 'Mesa / Sector',
         },
         filterField: '',
-        filterValues: [],
         pollingInterval: 60,
         googleSheetUrl: '',
         googleApiKey: '',
         adminPin: '1234',
       },
-      attendees: [],
-      history: [],
       auditLogs: [],
+      lastUpdated: null,
+      lastSyncSource: null,
     };
   }
 
@@ -513,50 +623,27 @@ class ApiService {
     try {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
     } catch (e) {
-      console.warn('Error guardando en local storage:', e);
+      console.warn('Error guardando en localStorage:', e);
     }
   }
 
-  // Manejo de cola offline
-  enqueueOfflineAction(action) {
-    try {
-      const queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || '[]');
-      queue.push(action);
-      localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
-    } catch (e) {
-      console.warn('Error encolando acción offline:', e);
-    }
-  }
-
-  async flushOfflineQueue() {
-    if (!this.serverConnected || !this.isOnline) return;
-    try {
-      const queueStr = localStorage.getItem(OFFLINE_QUEUE_KEY);
-      if (!queueStr) return;
-      const queue = JSON.parse(queueStr);
-      if (queue.length === 0) return;
-
-      console.log(`[Sync] Enviando ${queue.length} acciones pendientes acumuladas offline...`);
-
-      for (const item of queue) {
-        if (item.action === 'ACCREDIT') {
-          await fetch('/api/event/accredit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              dni: item.dni,
-              accredited: item.accredited,
-              operator: item.operator,
-            }),
-          });
+  async getAuditLogs() {
+    if (this.serverConnected && !this.isFirestoreActive && this.isOnline) {
+      try {
+        const res = await fetch('/api/admin/audit-logs', {
+          headers: { 'x-admin-pin': this.adminPin }
+        });
+        if (res.ok) {
+          const json = await res.json();
+          return json.logs || [];
         }
+      } catch (e) {
+        console.warn('Error obteniendo logs de servidor:', e);
       }
-
-      localStorage.removeItem(OFFLINE_QUEUE_KEY);
-      console.log('[Sync] Acciones offline sincronizadas exitosamente.');
-    } catch (e) {
-      console.warn('Error al vaciar cola offline:', e);
     }
+
+    const local = this.getLocalState();
+    return local.auditLogs || [];
   }
 }
 
