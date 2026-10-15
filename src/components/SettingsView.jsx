@@ -11,7 +11,8 @@ import {
   VolumeX,
   Sparkles,
   Layers,
-  HelpCircle
+  HelpCircle,
+  Lock
 } from 'lucide-react';
 
 export default function SettingsView({
@@ -29,6 +30,7 @@ export default function SettingsView({
   const [fieldLabels, setFieldLabels] = useState(config.fieldLabels || {});
   const [filterField, setFilterField] = useState(config.filterField || '');
   const [currentOperator, setCurrentOperator] = useState(operatorName);
+  const [adminPin, setAdminPin] = useState(config.adminPin || '1234');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Obtener todos los campos dinámicos disponibles en la nómina de asistentes
@@ -68,6 +70,7 @@ export default function SettingsView({
       visibleFields,
       fieldLabels,
       filterField,
+      adminPin: adminPin.trim() || '1234',
     };
     await onSaveConfig(newConfig);
     setOperatorName(currentOperator);
@@ -230,7 +233,32 @@ export default function SettingsView({
         </div>
       </div>
 
-      {/* 5. Preferencias Generales */}
+      {/* 5. Seguridad y PIN de Administrador */}
+      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
+        <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+          <Lock className="w-5 h-5 text-emerald-600" />
+          <span>Seguridad: PIN de Acceso Administrador</span>
+        </h2>
+        <p className="text-xs text-slate-500">
+          Este PIN protege las pestañas de Fuente de Datos, Configuración y Reportes. Los operadores en las puertas solo tendrán acceso a la pantalla de Acreditar y no podrán alterar ni borrar la base de datos sin este PIN.
+        </p>
+
+        <div className="max-w-xs">
+          <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+            PIN Actual / Nuevo (4 a 8 dígitos)
+          </label>
+          <input
+            type="password"
+            maxLength={10}
+            value={adminPin}
+            onChange={(e) => setAdminPin(e.target.value)}
+            placeholder="1234"
+            className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </div>
+      </div>
+
+      {/* 6. Preferencias Generales */}
       <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
         <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-emerald-600" />

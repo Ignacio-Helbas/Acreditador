@@ -2,6 +2,7 @@
 
 const LOCAL_STORAGE_KEY = 'acreditador_event_state';
 const OFFLINE_QUEUE_KEY = 'acreditador_offline_queue';
+const ADMIN_PIN_KEY = 'acreditador_admin_pin';
 
 class ApiService {
   constructor() {
@@ -11,6 +12,7 @@ class ApiService {
     this.isOnline = navigator.onLine;
     this.serverConnected = false;
     this.operatorName = localStorage.getItem('acreditador_operator_name') || 'Operador Puerta 1';
+    this.adminPin = sessionStorage.getItem(ADMIN_PIN_KEY) || localStorage.getItem(ADMIN_PIN_KEY) || '';
 
     // Manejo de eventos de conectividad del navegador
     window.addEventListener('online', () => {
@@ -25,6 +27,57 @@ class ApiService {
       this.serverConnected = false;
       this.notifyListeners({ type: 'NETWORK_STATUS', online: false });
     });
+  }
+
+  setAdminPin(pin) {
+    this.adminPin = pin;
+    if (pin) {
+      sessionStorage.setItem(ADMIN_PIN_KEY, pin);
+    } else {
+      sessionStorage.removeItem(ADMIN_PIN_KEY);
+      localStorage.removeItem(ADMIN_PIN_KEY);
+    }
+  }
+
+  getAdminPin() {
+    return this.adminPin;
+  }
+
+  isAdmin() {
+    return Boolean(this.adminPin);
+  }
+
+  async verifyAdminPin(pin) {
+    if (this.serverConnected && this.isOnline) {
+      try {
+        const res = await fetch('/api/auth/verify-pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin }),
+        });
+        if (res.ok) {
+          this.setAdminPin(pin);
+          return { success: true };
+        }
+        return { success: false, error: 'PIN incorrecto' };
+      } catch (err) {
+        console.warn('Error verificando PIN en servidor:', err);
+      }
+    }
+
+    // Validación offline
+    const local = this.getLocalState();
+    const expected = local.config?.adminPin || '1234';
+    if (String(pin).trim() === String(expected).trim()) {
+      this.setAdminPin(pin);
+      return { success: true };
+    }
+    return { success: false, error: 'PIN incorrecto' };
+  }
+
+  logoutAdmin() {
+    this.setAdminPin('');
+    this.notifyListeners({ type: 'ADMIN_LOGOUT' });
   }
 
   setOperatorName(name) {
@@ -206,15 +259,21 @@ class ApiService {
       try {
         const res = await fetch('/api/event/sync', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-admin-pin': this.adminPin,
+          },
           body: JSON.stringify({ attendees, source, eventName }),
         });
         if (res.ok) {
           const json = await res.json();
           return json;
+        } else if (res.status === 403) {
+          throw new Error('Se requiere PIN de Administrador para cargar o modificar la base de datos.');
         }
       } catch (err) {
         console.warn('Error enviando sync al backend:', err);
+        throw err;
       }
     }
 
@@ -275,10 +334,16 @@ class ApiService {
       try {
         const res = await fetch('/api/event/config', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-admin-pin': this.adminPin,
+          },
           body: JSON.stringify({ config, eventName }),
         });
         if (res.ok) return await res.json();
+        if (res.status === 403) {
+          throw new Error('Se requiere PIN de Administrador para guardar configuraciones.');
+        }
       } catch (e) {
         console.warn('No se pudo guardar config en backend:', e);
       }
@@ -302,10 +367,20 @@ class ApiService {
   async resetAccreditations() {
     if (this.serverConnected && this.isOnline) {
       try {
-        const res = await fetch('/api/event/reset-accreditations', { method: 'POST' });
+        const res = await fetch('/api/event/reset-accreditations', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-admin-pin': this.adminPin,
+          },
+        });
         if (res.ok) return await res.json();
+        if (res.status === 403) {
+          throw new Error('Se requiere PIN de Administrador para reiniciar el evento.');
+        }
       } catch (e) {
         console.warn('Error reseteando en servidor:', e);
+        throw e;
       }
     }
 

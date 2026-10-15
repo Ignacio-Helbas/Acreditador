@@ -45,6 +45,7 @@ let eventState = {
     pollingInterval: 60, // segundos
     googleSheetUrl: '',
     googleApiKey: '',
+    adminPin: '1234', // PIN por defecto para funciones de administrador
   },
   attendees: [], // Array de asistentes
   history: [], // Historial de acciones para auditoría
@@ -91,13 +92,49 @@ if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
 }
 
-// ================= Rutas API =================
+// Middleware de seguridad para proteger operaciones exclusivas de Administrador
+function requireAdmin(req, res, next) {
+  const clientPin = req.headers['x-admin-pin'] || req.body?.adminPin;
+  const currentPin = eventState.config.adminPin || '1234';
+  if (clientPin && String(clientPin).trim() === String(currentPin).trim()) {
+    return next();
+  }
+  return res.status(403).json({
+    success: false,
+    error: 'Acceso no autorizado: Se requiere el PIN de Administrador.',
+  });
+}
+
+// Endpoint para validar el PIN ingresado por el organizador
+app.post('/api/auth/verify-pin', (req, res) => {
+  const { pin } = req.body;
+  const currentPin = eventState.config.adminPin || '1234';
+  if (pin && String(pin).trim() === String(currentPin).trim()) {
+    return res.json({ success: true, valid: true });
+  }
+  return res.status(401).json({ success: false, valid: false, error: 'PIN de Administrador incorrecto.' });
+});
 
 // Obtener estado completo del evento
 app.get('/api/event', (req, res) => {
+  const clientPin = req.headers['x-admin-pin'];
+  const currentPin = eventState.config.adminPin || '1234';
+  const isAdmin = Boolean(clientPin && String(clientPin).trim() === String(currentPin).trim());
+
+  // Ocultar el PIN real a operadores no administradores
+  const safeConfig = {
+    ...eventState.config,
+    adminPin: isAdmin ? eventState.config.adminPin : undefined,
+    isAdminProtected: true,
+  };
+
   res.json({
     success: true,
-    data: eventState,
+    data: {
+      ...eventState,
+      config: safeConfig,
+    },
+    isAdmin,
     connectedOperators: wss.clients.size,
   });
 });
@@ -166,9 +203,8 @@ app.post('/api/event/accredit', (req, res) => {
   });
 });
 
-// Sincronización inteligente de asistentes (Excel o Google Sheets)
-// Conserva el estado de acreditación de quienes ya ingresaron
-app.post('/api/event/sync', (req, res) => {
+// Sincronización inteligente de asistentes (Excel o Google Sheets) - Exclusivo Administrador
+app.post('/api/event/sync', requireAdmin, (req, res) => {
   const { attendees: incomingAttendees, source = 'manual', eventName } = req.body;
 
   if (!Array.isArray(incomingAttendees)) {
@@ -238,8 +274,8 @@ app.post('/api/event/sync', (req, res) => {
   });
 });
 
-// Guardar configuración (campos visibles, etiquetas, filtros, polling)
-app.post('/api/event/config', (req, res) => {
+// Guardar configuración (campos visibles, etiquetas, filtros, polling, PIN) - Exclusivo Administrador
+app.post('/api/event/config', requireAdmin, (req, res) => {
   const { config, eventName } = req.body;
   if (config) {
     eventState.config = { ...eventState.config, ...config };
@@ -259,8 +295,8 @@ app.post('/api/event/config', (req, res) => {
   res.json({ success: true, config: eventState.config });
 });
 
-// Reiniciar / Limpiar acreditaciones (para pruebas o nuevo día de evento)
-app.post('/api/event/reset-accreditations', (req, res) => {
+// Reiniciar / Limpiar acreditaciones (para pruebas o nuevo día de evento) - Exclusivo Administrador
+app.post('/api/event/reset-accreditations', requireAdmin, (req, res) => {
   eventState.attendees.forEach((a) => {
     a.acreditado = false;
     a.fechaAcreditacion = null;

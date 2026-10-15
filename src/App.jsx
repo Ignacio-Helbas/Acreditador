@@ -4,12 +4,15 @@ import OperatorView from './components/OperatorView';
 import DataSourceView from './components/DataSourceView';
 import SettingsView from './components/SettingsView';
 import StatsView from './components/StatsView';
+import AdminPinModal from './components/AdminPinModal';
 import { apiService } from './services/api';
 import { playSuccessSound, playWarningSound } from './utils/sound';
 import { fetchGoogleSheetViaCSV, fetchGoogleSheetViaAPI } from './utils/googleSheets';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState('operator');
+  const [isAdmin, setIsAdmin] = useState(() => apiService.isAdmin());
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [eventName, setEventName] = useState('Mi Evento 2026');
   const [attendees, setAttendees] = useState([]);
   const [config, setConfig] = useState({
@@ -260,12 +263,36 @@ export default function App() {
     return { total, accredited, pending, rate };
   }, [attendees]);
 
+  // Autenticación de Administrador
+  const handleVerifyPin = async (pin) => {
+    const res = await apiService.verifyAdminPin(pin);
+    if (res.success) {
+      setIsAdmin(true);
+      return { success: true };
+    }
+    return res;
+  };
+
+  const handleLogoutAdmin = () => {
+    apiService.logoutAdmin();
+    setIsAdmin(false);
+    setCurrentTab('operator');
+  };
+
+  const handleSelectTab = (tab) => {
+    if (tab !== 'operator' && !isAdmin) {
+      setIsAdminModalOpen(true);
+      return;
+    }
+    setCurrentTab(tab);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Barra de Navegación Superior */}
       <Navbar
         currentTab={currentTab}
-        setCurrentTab={setCurrentTab}
+        setCurrentTab={handleSelectTab}
         eventName={eventName}
         setEventName={handleSaveEventName}
         stats={stats}
@@ -275,9 +302,12 @@ export default function App() {
         soundEnabled={soundEnabled}
         setSoundEnabled={setSoundEnabled}
         operatorName={operatorName}
+        isAdmin={isAdmin}
+        onOpenAdminModal={() => setIsAdminModalOpen(true)}
+        onLogoutAdmin={handleLogoutAdmin}
       />
 
-      {/* Contenido Principal según Pestaña */}
+      {/* Contenido Principal según Pestaña y Rol */}
       <main className="flex-1 pb-16">
         {currentTab === 'operator' && (
           <OperatorView
@@ -293,7 +323,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'datasource' && (
+        {isAdmin && currentTab === 'datasource' && (
           <DataSourceView
             onSyncAttendees={handleSyncAttendees}
             config={config}
@@ -306,7 +336,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'settings' && (
+        {isAdmin && currentTab === 'settings' && (
           <SettingsView
             config={config}
             onSaveConfig={handleSaveConfig}
@@ -320,7 +350,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'stats' && (
+        {isAdmin && currentTab === 'stats' && (
           <StatsView
             attendees={attendees}
             config={config}
@@ -330,6 +360,13 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Modal de Ingreso de PIN de Administrador */}
+      <AdminPinModal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
+        onVerifyPin={handleVerifyPin}
+      />
     </div>
   );
 }
