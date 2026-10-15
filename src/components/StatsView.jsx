@@ -9,14 +9,16 @@ import {
   Search, 
   RotateCcw, 
   AlertTriangle,
-  FileText
+  FileText,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { exportAttendeesToExcel, exportAttendeesToCSV } from '../utils/excel';
 
 export default function StatsView({
-  attendees,
-  config,
-  eventName,
+  attendees = [],
+  config = {},
+  eventName = 'Evento',
   onResetAccreditations,
   onToggleAccredit,
 }) {
@@ -75,114 +77,108 @@ export default function StatsView({
 
   const labels = config.fieldLabels || {};
 
+  const formatTime = (isoString) => {
+    if (!isoString) return '-';
+    try {
+      const date = new Date(isoString);
+      return date.toLocaleTimeString('es-AR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return '-';
+    }
+  };
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
       
       {/* Encabezado y Botones de Exportación */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-slate-200">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-zinc-200 dark:border-zinc-800">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-emerald-600" />
+          <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
             <span>Métricas y Reporte de Acreditación</span>
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Revisá la asistencia en tiempo real y exportá los resultados con auditoría de fecha y operador.
+          <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+            Revisá la asistencia en vivo y exportá el reporte final con fecha, hora y operador.
           </p>
         </div>
 
         {/* Acciones de exportación */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => exportAttendeesToExcel(attendees, eventName, config)}
-            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 active:scale-95 transition flex items-center gap-2"
+            className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition flex items-center gap-1.5"
           >
-            <FileSpreadsheet className="w-4 h-4" />
-            <span>Exportar a Excel (.xlsx)</span>
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            <span>Exportar Excel (.xlsx)</span>
           </button>
 
           <button
             onClick={() => exportAttendeesToCSV(attendees, eventName, config)}
-            className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold text-xs shadow-sm active:scale-95 transition flex items-center gap-2"
+            className="px-3.5 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 font-semibold text-xs shadow-sm transition flex items-center gap-1.5"
           >
-            <Download className="w-4 h-4 text-slate-500" />
-            <span>Descargar CSV</span>
+            <FileText className="w-3.5 h-3.5 text-zinc-500" />
+            <span>Exportar CSV</span>
+          </button>
+
+          <button
+            onClick={() => setShowResetModal(true)}
+            className="px-3 py-2 rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400 hover:bg-rose-100 font-semibold text-xs transition flex items-center gap-1"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Reiniciar</span>
           </button>
         </div>
       </div>
 
-      {/* Tarjetas de Métricas Principales */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Total Invitados</span>
-            <Users className="w-5 h-5 text-slate-400" />
-          </div>
-          <p className="text-3xl font-extrabold text-slate-900">{total}</p>
-          <p className="text-xs text-slate-400 mt-1">Cargados en el sistema</p>
+      {/* Tarjetas de Métricas Generales */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white dark:bg-zinc-900 rounded-lg p-4 border border-zinc-200 dark:border-zinc-800 shadow-sm">
+          <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Total Invitados</p>
+          <p className="text-2xl sm:text-3xl font-extrabold text-zinc-900 dark:text-zinc-100 font-mono mt-1">{total}</p>
+          <p className="text-[11px] text-zinc-400 mt-0.5">En nómina</p>
         </div>
 
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between text-emerald-600 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Acreditados</span>
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-          <p className="text-3xl font-extrabold text-emerald-600">{accredited}</p>
-          <p className="text-xs text-emerald-600/80 mt-1">Ingresaron al evento</p>
+        <div className="bg-white dark:bg-zinc-900 rounded-lg p-4 border border-zinc-200 dark:border-zinc-800 shadow-sm">
+          <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Acreditados</p>
+          <p className="text-2xl sm:text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono mt-1">{accredited}</p>
+          <p className="text-[11px] text-zinc-400 mt-0.5">{rate}% del total</p>
         </div>
 
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between text-amber-500 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Pendientes</span>
-            <Clock className="w-5 h-5" />
-          </div>
-          <p className="text-3xl font-extrabold text-slate-700">{pending}</p>
-          <p className="text-xs text-slate-400 mt-1">Aún no se presentaron</p>
+        <div className="bg-white dark:bg-zinc-900 rounded-lg p-4 border border-zinc-200 dark:border-zinc-800 shadow-sm">
+          <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Pendientes</p>
+          <p className="text-2xl sm:text-3xl font-extrabold text-amber-600 dark:text-amber-400 font-mono mt-1">{pending}</p>
+          <p className="text-[11px] text-zinc-400 mt-0.5">Por ingresar</p>
         </div>
 
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Asistencia</span>
-            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-              {rate}%
-            </span>
+        <div className="bg-white dark:bg-zinc-900 rounded-lg p-4 border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col justify-center">
+          <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">Tasa de Asistencia</p>
+          <div className="w-full h-3 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden border border-zinc-200 dark:border-zinc-700">
+            <div className="h-full bg-emerald-600 rounded-full transition-all" style={{ width: `${rate}%` }} />
           </div>
-          <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden mt-3 mb-2">
-            <div
-              className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-              style={{ width: `${rate}%` }}
-            />
-          </div>
-          <p className="text-xs text-slate-500">{accredited} de {total} personas</p>
+          <span className="text-xs font-mono font-bold text-right text-zinc-700 dark:text-zinc-300 mt-1">{rate}%</span>
         </div>
       </div>
 
-      {/* Desglose por Categorías */}
+      {/* Desglose por Categoría / Filtro */}
       {categoryStats.length > 0 && (
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
-          <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider">
-            Asistencia por {labels[categoryField] || categoryField}
+        <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3">
+          <h3 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+            Desglose por {labels[categoryField] || categoryField}
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             {categoryStats.map((item) => (
-              <div
-                key={item.category}
-                className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/70 space-y-1.5"
-              >
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-slate-800 truncate" title={item.category}>
-                    {item.category}
+              <div key={item.category} className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">{item.category}</span>
+                  <span className="text-xs font-mono font-semibold text-zinc-500 dark:text-zinc-400">
+                    {item.accredited}/{item.total} ({item.percentage}%)
                   </span>
-                  <span className="font-semibold text-emerald-700">{item.percentage}%</span>
                 </div>
-                <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-emerald-500 rounded-full"
-                    style={{ width: `${item.percentage}%` }}
-                  />
-                </div>
-                <div className="flex justify-between text-[11px] text-slate-500">
-                  <span>Acreditados: <b>{item.accredited}</b></span>
-                  <span>Total: <b>{item.total}</b></span>
+                <div className="w-full h-2 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                  <div className="h-full bg-emerald-600 rounded-full" style={{ width: `${item.percentage}%` }} />
                 </div>
               </div>
             ))}
@@ -191,110 +187,97 @@ export default function StatsView({
       )}
 
       {/* Tabla Completa de Asistentes */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-4 p-5">
+      <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden space-y-4 p-5">
+        
+        {/* Barra de Búsqueda y Filtro de la Tabla */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <h3 className="font-bold text-slate-900 text-base">Nómina Completa de Invitados</h3>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Buscador dentro de la tabla */}
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setCurrentPage(1);
-                }}
-                placeholder="Filtrar por DNI o nombre..."
-                className="pl-9 pr-3 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 w-56"
-              />
-            </div>
-
-            {/* Selector de estado */}
-            <select
-              value={statusFilter}
+          <div className="relative flex-1 max-w-sm">
+            <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              value={searchTerm}
               onChange={(e) => {
-                setStatusFilter(e.target.value);
+                setSearchTerm(e.target.value);
                 setCurrentPage(1);
               }}
-              className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+              placeholder="Buscar por DNI o nombre..."
+              className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-xs font-medium text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div className="inline-flex rounded-lg bg-zinc-100 dark:bg-zinc-800 p-0.5 border border-zinc-200 dark:border-zinc-700 text-xs self-start sm:self-auto">
+            <button
+              onClick={() => { setStatusFilter('ALL'); setCurrentPage(1); }}
+              className={`px-2.5 py-1 rounded font-semibold transition ${statusFilter === 'ALL' ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm' : 'text-zinc-600 dark:text-zinc-400'}`}
             >
-              <option value="ALL">Todos los estados</option>
-              <option value="ACCREDITED">Solo acreditados</option>
-              <option value="PENDING">Solo pendientes</option>
-            </select>
+              Todos ({total})
+            </button>
+            <button
+              onClick={() => { setStatusFilter('ACCREDITED'); setCurrentPage(1); }}
+              className={`px-2.5 py-1 rounded font-semibold transition ${statusFilter === 'ACCREDITED' ? 'bg-white dark:bg-zinc-900 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-zinc-600 dark:text-zinc-400'}`}
+            >
+              Acreditados ({accredited})
+            </button>
+            <button
+              onClick={() => { setStatusFilter('PENDING'); setCurrentPage(1); }}
+              className={`px-2.5 py-1 rounded font-semibold transition ${statusFilter === 'PENDING' ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm' : 'text-zinc-600 dark:text-zinc-400'}`}
+            >
+              Pendientes ({pending})
+            </button>
           </div>
         </div>
 
         {/* Tabla */}
-        <div className="overflow-x-auto border border-slate-200 rounded-xl">
-          <table className="min-w-full divide-y divide-slate-200 text-left text-xs">
-            <thead className="bg-slate-50 font-semibold text-slate-600">
+        <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
+          <table className="w-full text-left text-xs text-zinc-700 dark:text-zinc-300">
+            <thead className="bg-zinc-50 dark:bg-zinc-950 text-zinc-500 dark:text-zinc-400 uppercase text-[10px] font-bold border-b border-zinc-200 dark:border-zinc-800">
               <tr>
-                <th className="px-4 py-3">{labels['dni'] || 'DNI'}</th>
-                <th className="px-4 py-3">Nombre y Apellido</th>
-                {config.visibleFields?.slice(0, 3).map((f) => (
-                  <th key={f} className="px-4 py-3">{labels[f] || f}</th>
-                ))}
-                <th className="px-4 py-3">Estado</th>
-                <th className="px-4 py-3">Hora Ingreso</th>
-                <th className="px-4 py-3">Operador</th>
-                <th className="px-4 py-3 text-right">Acción</th>
+                <th className="px-3 py-2.5 font-mono">DNI</th>
+                <th className="px-3 py-2.5">Nombre y Apellido</th>
+                <th className="px-3 py-2.5">Estado</th>
+                <th className="px-3 py-2.5">Hora Acreditación</th>
+                <th className="px-3 py-2.5">Operador</th>
+                <th className="px-3 py-2.5 text-right">Acción</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 bg-white text-slate-700">
-              {paginatedAttendees.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
-                    No se encontraron invitados con los criterios aplicados.
+            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+              {paginatedAttendees.map((att) => (
+                <tr key={att.id || att.dni} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/40">
+                  <td className="px-3 py-2 font-mono font-bold text-zinc-900 dark:text-zinc-100">{att.dni}</td>
+                  <td className="px-3 py-2 font-semibold text-zinc-800 dark:text-zinc-200">{att.nombre} {att.apellido}</td>
+                  <td className="px-3 py-2">
+                    {att.acreditado ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                        Acreditado
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
+                        Pendiente
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 font-mono text-zinc-600 dark:text-zinc-400 text-[11px]">{formatTime(att.fechaAcreditacion)}</td>
+                  <td className="px-3 py-2 text-zinc-500 text-[11px] truncate max-w-[120px]">{att.operador || '-'}</td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      onClick={() => onToggleAccredit(att.dni, !att.acreditado)}
+                      className={`px-2 py-1 rounded text-[11px] font-semibold transition ${
+                        att.acreditado
+                          ? 'text-zinc-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20'
+                          : 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 font-bold'
+                      }`}
+                    >
+                      {att.acreditado ? 'Deshacer' : 'Acreditar'}
+                    </button>
                   </td>
                 </tr>
-              ) : (
-                paginatedAttendees.map((att) => (
-                  <tr key={att.id} className="hover:bg-slate-50/80 transition">
-                    <td className="px-4 py-2.5 font-mono font-medium text-slate-900">{att.dni}</td>
-                    <td className="px-4 py-2.5 font-bold text-slate-800">
-                      {att.nombre} {att.apellido}
-                    </td>
-                    {config.visibleFields?.slice(0, 3).map((f) => (
-                      <td key={f} className="px-4 py-2.5 text-slate-600">
-                        {att.dynamicFields?.[f] || '-'}
-                      </td>
-                    ))}
-                    <td className="px-4 py-2.5">
-                      {att.acreditado ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
-                          Acreditado
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600">
-                          Pendiente
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-slate-500 font-mono text-[11px]">
-                      {att.fechaAcreditacion
-                        ? new Date(att.fechaAcreditacion).toLocaleTimeString('es-AR')
-                        : '-'}
-                    </td>
-                    <td className="px-4 py-2.5 text-slate-500 text-[11px]">
-                      {att.operador || '-'}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      <button
-                        onClick={() => onToggleAccredit(att.dni, !att.acreditado)}
-                        className={`text-[11px] font-semibold px-2 py-1 rounded-md transition ${
-                          att.acreditado
-                            ? 'text-rose-600 hover:bg-rose-50'
-                            : 'text-emerald-700 hover:bg-emerald-50'
-                        }`}
-                      >
-                        {att.acreditado ? 'Desmarcar' : 'Acreditar'}
-                      </button>
-                    </td>
-                  </tr>
-                ))
+              ))}
+              {paginatedAttendees.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-8 text-center text-zinc-400 text-xs">
+                    No se encontraron asistentes con los filtros actuales.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -302,68 +285,46 @@ export default function StatsView({
 
         {/* Paginación */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between text-xs text-slate-500 pt-2">
-            <span>
-              Mostrando {Math.min((currentPage - 1) * pageSize + 1, filteredAttendees.length)} a{' '}
-              {Math.min(currentPage * pageSize, filteredAttendees.length)} de {filteredAttendees.length} invitados
-            </span>
-            <div className="flex space-x-1">
+          <div className="flex items-center justify-between text-xs text-zinc-500 pt-2">
+            <span>Página {currentPage} de {totalPages}</span>
+            <div className="flex items-center space-x-1">
               <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                className="px-2.5 py-1 rounded-md border border-slate-200 hover:bg-slate-50 disabled:opacity-40"
+                className="p-1 rounded border border-zinc-200 dark:border-zinc-800 disabled:opacity-40"
               >
-                Anterior
+                <ChevronLeft className="w-4 h-4" />
               </button>
-              <span className="px-2.5 py-1 font-semibold text-slate-700">
-                {currentPage} / {totalPages}
-              </span>
               <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-                className="px-2.5 py-1 rounded-md border border-slate-200 hover:bg-slate-50 disabled:opacity-40"
+                className="p-1 rounded border border-zinc-200 dark:border-zinc-800 disabled:opacity-40"
               >
-                Siguiente
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
         )}
+
       </div>
 
-      {/* Zona de Peligro: Reiniciar Acreditaciones */}
-      <div className="bg-rose-50/50 rounded-2xl p-6 border border-rose-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h3 className="text-sm font-bold text-rose-900 flex items-center gap-1.5">
-            <AlertTriangle className="w-4 h-4 text-rose-600" />
-            <span>Reiniciar Acreditaciones del Evento</span>
-          </h3>
-          <p className="text-xs text-rose-700 mt-1">
-            Esta opción vuelve a marcar a todos los invitados como "pendientes" y borra los timestamps de ingreso. Mantiene la lista de invitados intacta.
-          </p>
-        </div>
-        <button
-          onClick={() => setShowResetModal(true)}
-          className="px-4 py-2 rounded-xl bg-white border border-rose-300 text-rose-700 hover:bg-rose-100 font-bold text-xs transition shrink-0"
-        >
-          Reiniciar acreditaciones
-        </button>
-      </div>
-
-      {/* Modal de confirmación para reinicio */}
+      {/* Modal de Confirmación para Reiniciar Acreditaciones */}
       {showResetModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200">
-            <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center mb-4">
-              <RotateCcw className="w-6 h-6" />
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 max-w-md w-full shadow-xl border border-zinc-200 dark:border-zinc-800">
+            <div className="w-10 h-10 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-lg flex items-center justify-center mb-3 border border-rose-200 dark:border-rose-800">
+              <AlertTriangle className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-bold text-slate-900">¿Estás seguro de reiniciar?</h3>
-            <p className="text-sm text-slate-600 mt-2">
-              Se restablecerá el estado de los <b>{accredited} asistentes acreditados</b> a pendientes. Te recomendamos exportar a Excel antes de continuar.
+            <h3 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-zinc-100">
+              ¿Reiniciar todas las acreditaciones?
+            </h3>
+            <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 mt-1">
+              Esta acción marcará a todos los <b>{total} asistentes</b> como <b>pendientes</b> y borrará las marcas de tiempo de ingreso. La nómina de asistentes no se borrará.
             </p>
-            <div className="flex space-x-3 mt-6">
+            <div className="flex space-x-3 mt-5">
               <button
                 onClick={() => setShowResetModal(false)}
-                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 font-medium text-sm hover:bg-slate-50 transition"
+                className="flex-1 py-2 px-3 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 font-semibold text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
               >
                 Cancelar
               </button>
@@ -372,9 +333,9 @@ export default function StatsView({
                   await onResetAccreditations();
                   setShowResetModal(false);
                 }}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm shadow-md transition"
+                className="flex-1 py-2 px-3 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-sm transition"
               >
-                Sí, reiniciar
+                Sí, reiniciar a cero
               </button>
             </div>
           </div>

@@ -11,7 +11,8 @@ import {
   Eye,
   Key,
   Clock,
-  ExternalLink
+  ExternalLink,
+  Check
 } from 'lucide-react';
 import { parseExcelFile } from '../utils/excel';
 import { fetchGoogleSheetViaCSV, fetchGoogleSheetViaAPI } from '../utils/googleSheets';
@@ -91,7 +92,7 @@ export default function DataSourceView({
     try {
       const res = await onSyncAttendees(parsedPreview.attendees, 'excel');
       setExcelSuccess(
-        `¡Éxito! Se cargaron ${res.summary?.total || parsedPreview.attendees.length} asistentes (${res.summary?.added || 0} nuevos, ${res.summary?.preservedAccreditations || 0} acreditaciones previas conservadas).`
+        `Se cargaron ${res.summary?.total || parsedPreview.attendees.length} asistentes (${res.summary?.added || 0} nuevos, ${res.summary?.preservedAccreditations || 0} acreditaciones previas conservadas).`
       );
       setParsedPreview(null);
       setSelectedFile(null);
@@ -102,17 +103,17 @@ export default function DataSourceView({
     }
   };
 
-  // Conectar y sincronizar Google Sheets
-  const handleConnectSheet = async (isManualClick = false) => {
+  // Conectar y probar Google Sheet
+  const handleConnectSheet = async () => {
+    setSheetError(null);
+    setSheetSuccess(null);
+
     if (!sheetUrl.trim()) {
-      setSheetError('Por favor ingresá la URL o ID de la Google Sheet.');
+      setSheetError('Por favor ingresá el enlace de la Google Sheet');
       return;
     }
 
-    setSheetError(null);
-    setSheetSuccess(null);
     setIsSyncing(true);
-
     try {
       let parsed;
       if (useApiKey && apiKey.trim()) {
@@ -121,24 +122,42 @@ export default function DataSourceView({
         parsed = await fetchGoogleSheetViaCSV(sheetUrl);
       }
 
-      // Guardar configuración de la hoja y el intervalo de polling
+      if (!parsed || !parsed.attendees || parsed.attendees.length === 0) {
+        throw new Error('No se detectaron filas o columnas válidas (DNI, Nombre, Apellido) en la hoja.');
+      }
+
+      // Guardar configuración del enlace y tiempo de polling
       await onSaveConfig({
-        googleSheetUrl: sheetUrl,
-        googleApiKey: apiKey,
-        pollingInterval: Number(pollingSeconds),
+        ...config,
+        googleSheetUrl: sheetUrl.trim(),
+        googleApiKey: useApiKey ? apiKey.trim() : '',
+        pollingInterval: Number(pollingSeconds) || 60,
       });
 
+      // Sincronizar asistentes con la base de datos
       const res = await onSyncAttendees(parsed.attendees, 'google-sheets');
+
       setSheetSuccess(
-        `¡Sincronización exitosa! ${res.summary?.total || parsed.attendees.length} asistentes sincronizados (${res.summary?.preservedAccreditations || 0} acreditaciones activas conservadas).`
+        `Google Sheet vinculada. Se sincronizaron ${res.summary?.total || parsed.attendees.length} asistentes. Consulta cada ${pollingSeconds}s.`
       );
     } catch (err) {
-      setSheetError(
-        `Error al sincronizar con Google Sheets: ${err.message}. Verificá que la hoja sea pública ("Cualquier persona con el enlace puede ver") o revisá tu API Key.`
-      );
+      setSheetError(err.message);
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  // Desconectar Google Sheet
+  const handleDisconnectSheet = async () => {
+    setSheetUrl('');
+    setApiKey('');
+    await onSaveConfig({
+      ...config,
+      googleSheetUrl: '',
+      googleApiKey: '',
+      pollingInterval: 0,
+    });
+    setSheetSuccess('Sincronización con Google Sheet desvinculada.');
   };
 
   // Descargar plantilla Excel de ejemplo
@@ -147,7 +166,7 @@ export default function DataSourceView({
       {
         DNI: '38123456',
         Nombre: 'Juan Carlos',
-        Apellido: 'Pérez',
+        Apellido: 'González',
         Empresa: 'Tech Solutions SA',
         Cargo: 'Director General',
         'Tipo de Entrada': 'VIP',
@@ -155,18 +174,8 @@ export default function DataSourceView({
         Acompañantes: '1',
       },
       {
-        DNI: '40987654',
-        Nombre: 'María Eugenia',
-        Apellido: 'González',
-        Empresa: 'Innovar Group',
-        Cargo: 'Gerente de Marketing',
-        'Tipo de Entrada': 'General',
-        Mesa: 'Mesa 4',
-        Acompañantes: '0',
-      },
-      {
-        DNI: '35456789',
-        Nombre: 'Lucas',
+        DNI: '35444888',
+        Nombre: 'Mariana',
         Apellido: 'Martínez',
         Empresa: 'Banco Central',
         Cargo: 'Analista Senior',
@@ -203,33 +212,35 @@ export default function DataSourceView({
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
       
       {/* Encabezado */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Fuente de Datos de Invitados</h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+            Fuente de Datos de Invitados
+          </h1>
+          <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1">
             Cargá la nómina de asistentes desde un archivo Excel local o conectá una Google Sheet en la nube.
           </p>
         </div>
         <button
           onClick={handleDownloadSampleExcel}
-          className="inline-flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-emerald-700 hover:border-emerald-300 transition shadow-sm"
+          className="inline-flex items-center space-x-2 px-3 py-2 rounded-lg text-xs font-semibold bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:text-emerald-600 transition shadow-sm self-start sm:self-auto"
         >
-          <Download className="w-4 h-4 text-emerald-600" />
-          <span>Descargar plantilla Excel de ejemplo</span>
+          <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+          <span>Descargar plantilla Excel</span>
         </button>
       </div>
 
       {/* Selector de Pestañas de Origen */}
-      <div className="flex border-b border-slate-200 mb-6 space-x-2">
+      <div className="flex border-b border-zinc-200 dark:border-zinc-800 mb-6 space-x-2">
         <button
           onClick={() => setActiveSourceTab('excel')}
-          className={`flex items-center space-x-2 py-3 px-5 border-b-2 font-semibold text-sm transition ${
+          className={`flex items-center space-x-2 py-2.5 px-4 border-b-2 font-semibold text-xs sm:text-sm transition ${
             activeSourceTab === 'excel'
-              ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50 rounded-t-xl'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+              ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-t-lg'
+              : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
           }`}
         >
           <FileSpreadsheet className="w-4 h-4" />
@@ -238,10 +249,10 @@ export default function DataSourceView({
 
         <button
           onClick={() => setActiveSourceTab('sheets')}
-          className={`flex items-center space-x-2 py-3 px-5 border-b-2 font-semibold text-sm transition ${
+          className={`flex items-center space-x-2 py-2.5 px-4 border-b-2 font-semibold text-xs sm:text-sm transition ${
             activeSourceTab === 'sheets'
-              ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50 rounded-t-xl'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+              ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-t-lg'
+              : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
           }`}
         >
           <Link className="w-4 h-4" />
@@ -258,24 +269,24 @@ export default function DataSourceView({
             onDragLeave={handleDrag}
             onDragOver={handleDrag}
             onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-2xl p-8 sm:p-12 text-center transition-all ${
+            className={`border-2 border-dashed rounded-xl p-8 sm:p-12 text-center transition-all ${
               dragActive
-                ? 'border-emerald-500 bg-emerald-50/60 scale-[1.01]'
-                : 'border-slate-300 hover:border-slate-400 bg-white'
+                ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/30'
+                : 'border-zinc-300 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'
             }`}
           >
-            <div className="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
-              <Upload className="w-8 h-8" />
+            <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-lg flex items-center justify-center mx-auto mb-3 border border-emerald-200 dark:border-emerald-800">
+              <Upload className="w-6 h-6" />
             </div>
-            <h3 className="text-lg font-bold text-slate-800">
+            <h3 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-zinc-100">
               Arrastrá tu archivo Excel (.xlsx, .xls) o CSV aquí
             </h3>
-            <p className="text-slate-500 text-sm mt-1 max-w-md mx-auto">
+            <p className="text-zinc-500 dark:text-zinc-400 text-xs sm:text-sm mt-1 max-w-md mx-auto">
               Detecta automáticamente las columnas mínimas <b>DNI, Nombre, Apellido</b> y todos los campos adicionales (empresa, mesa, VIP, etc.).
             </p>
 
             <div className="mt-5">
-              <label className="inline-flex items-center px-5 py-2.5 rounded-xl text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shadow-md shadow-emerald-600/20 active:scale-95 transition">
+              <label className="inline-flex items-center px-4 py-2.5 rounded-lg text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shadow-sm transition">
                 <span>Elegir archivo desde la computadora</span>
                 <input
                   type="file"
@@ -285,98 +296,99 @@ export default function DataSourceView({
                 />
               </label>
             </div>
+
+            {selectedFile && (
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-3 font-mono">
+                Archivo seleccionado: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{selectedFile.name}</span> ({(selectedFile.size / 1024).toFixed(1)} KB)
+              </p>
+            )}
           </div>
 
-          {/* Mensajes de Estado */}
+          {/* Alertas */}
           {excelError && (
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start space-x-3 text-rose-800 text-sm">
-              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-rose-600" />
-              <span>{excelError}</span>
+            <div className="p-4 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-200 text-xs sm:text-sm flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Error en la lectura del archivo</p>
+                <p className="text-xs mt-0.5 opacity-90">{excelError}</p>
+              </div>
             </div>
           )}
 
           {excelSuccess && (
-            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start space-x-3 text-emerald-800 text-sm">
-              <CheckCircle className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600" />
-              <span>{excelSuccess}</span>
+            <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-200 text-xs sm:text-sm flex items-start gap-2.5">
+              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Sincronización exitosa</p>
+                <p className="text-xs mt-0.5 opacity-90">{excelSuccess}</p>
+              </div>
             </div>
           )}
 
-          {/* Vista Previa de Detección de Columnas y Filas */}
+          {/* Previsualización de los datos parseados antes de confirmar */}
           {parsedPreview && (
-            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-zinc-200 dark:border-zinc-800">
                 <div>
-                  <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                    <Eye className="w-5 h-5 text-emerald-600" />
-                    <span>Vista previa del archivo cargado</span>
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Archivo: <b>{selectedFile?.name}</b> — Total: <b>{parsedPreview.attendees.length} asistentes detectados</b>
+                  <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-emerald-600" />
+                    <span>Previsualización del archivo</span>
+                  </h4>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    Se detectaron <b className="font-mono">{parsedPreview.attendees.length}</b> invitados válidos y <b className="font-mono">{parsedPreview.allHeaders.length}</b> columnas.
                   </p>
                 </div>
+
                 <button
                   onClick={handleConfirmExcel}
                   disabled={isSyncing}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-md shadow-emerald-600/20 active:scale-95 transition flex items-center gap-2 disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition disabled:opacity-50 flex items-center justify-center gap-1.5"
                 >
-                  <CheckCircle className="w-4 h-4" />
+                  <Check className="w-3.5 h-3.5 stroke-[3]" />
                   <span>{isSyncing ? 'Sincronizando...' : 'Confirmar y Cargar Asistentes'}</span>
                 </button>
               </div>
 
-              {/* Columnas Mapeadas */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-                <div>
-                  <span className="text-slate-500 block">Columna DNI detectada:</span>
-                  <span className="font-bold text-slate-800 font-mono">{parsedPreview.detectedMapping.dni}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Columna Nombre detectada:</span>
-                  <span className="font-bold text-slate-800">{parsedPreview.detectedMapping.nombre || '(No especificada)'}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Columna Apellido detectada:</span>
-                  <span className="font-bold text-slate-800">{parsedPreview.detectedMapping.apellido || '(No especificada)'}</span>
-                </div>
+              {/* Columnas detectadas */}
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="text-zinc-400 font-semibold text-[11px] uppercase mr-1">Columnas:</span>
+                {parsedPreview.allHeaders.map((h) => {
+                  const isCore = ['dni', 'nombre', 'apellido'].includes(h.toLowerCase());
+                  return (
+                    <span
+                      key={h}
+                      className={`px-2 py-0.5 rounded text-[11px] font-mono ${
+                        isCore
+                          ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700'
+                      }`}
+                    >
+                      {h}
+                    </span>
+                  );
+                })}
               </div>
 
-              {/* Campos dinámicos detectados */}
-              {parsedPreview.dynamicFields.length > 0 && (
-                <div className="text-xs text-slate-600">
-                  <span className="font-semibold text-slate-700">Campos adicionales detectados: </span>
-                  {parsedPreview.dynamicFields.map((f) => (
-                    <span key={f} className="inline-block px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md mr-1.5 mb-1 font-mono">
-                      {f}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Tabla de Primeras 5 Filas */}
-              <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                <table className="min-w-full divide-y divide-slate-200 text-left text-xs">
-                  <thead className="bg-slate-50 font-semibold text-slate-700">
+              {/* Muestra de primeras 5 filas */}
+              <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
+                <table className="w-full text-left text-xs text-zinc-700 dark:text-zinc-300">
+                  <thead className="bg-zinc-50 dark:bg-zinc-950 text-zinc-500 dark:text-zinc-400 uppercase text-[10px] font-bold border-b border-zinc-200 dark:border-zinc-800">
                     <tr>
-                      <th className="px-3 py-2.5">DNI</th>
-                      <th className="px-3 py-2.5">Nombre</th>
-                      <th className="px-3 py-2.5">Apellido</th>
-                      {parsedPreview.dynamicFields.slice(0, 4).map((f) => (
-                        <th key={f} className="px-3 py-2.5">{f}</th>
-                      ))}
+                      <th className="px-3 py-2 font-mono">DNI</th>
+                      <th className="px-3 py-2">Nombre</th>
+                      <th className="px-3 py-2">Apellido</th>
+                      <th className="px-3 py-2">Campos Adicionales</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200 bg-white text-slate-700">
-                    {parsedPreview.attendees.slice(0, 5).map((att, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50">
-                        <td className="px-3 py-2 font-mono font-medium">{att.dni}</td>
-                        <td className="px-3 py-2 font-medium">{att.nombre}</td>
-                        <td className="px-3 py-2 font-medium">{att.apellido}</td>
-                        {parsedPreview.dynamicFields.slice(0, 4).map((f) => (
-                          <td key={f} className="px-3 py-2 text-slate-500">
-                            {att.dynamicFields[f] || '-'}
-                          </td>
-                        ))}
+                  <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                    {parsedPreview.attendees.slice(0, 5).map((att, i) => (
+                      <tr key={i} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/40">
+                        <td className="px-3 py-2 font-mono font-bold text-zinc-900 dark:text-zinc-100">{att.dni}</td>
+                        <td className="px-3 py-2">{att.nombre}</td>
+                        <td className="px-3 py-2">{att.apellido}</td>
+                        <td className="px-3 py-2 text-zinc-500 text-[11px]">
+                          {Object.entries(att.dynamicFields || {}).map(([k, v]) => `${k}: ${v}`).join(' | ')}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -387,135 +399,129 @@ export default function DataSourceView({
         </div>
       )}
 
-      {/* ================= PESTAÑA B: GOOGLE SHEETS ================= */}
+      {/* ================= PESTAÑA B: CONECTAR GOOGLE SHEETS ================= */}
       {activeSourceTab === 'sheets' && (
-        <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
-          <div>
-            <h3 className="text-lg font-bold text-slate-900">Vincular Hoja de Cálculo de Google Sheets</h3>
-            <p className="text-slate-500 text-sm mt-1">
-              Conectá la hoja compartida de tu evento para consultar cambios periódicamente sin perder el estado de acreditación.
-            </p>
-          </div>
-
-          {/* Formulario de Configuración de Sheet */}
-          <div className="space-y-4">
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-5">
+            
+            {/* Input URL */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                URL o ID de la Google Sheet *
+              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider mb-1.5">
+                Enlace / URL de la Google Sheet
               </label>
               <input
                 type="text"
                 value={sheetUrl}
                 onChange={(e) => setSheetUrl(e.target.value)}
                 placeholder="https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit"
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-xs sm:text-sm font-mono text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
               />
-              <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-                <HelpCircle className="w-3.5 h-3.5" />
-                <span>La hoja debe tener permiso de lectura: <i>"Cualquier persona con el enlace puede ver"</i>.</span>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
+                Asegurate de que la hoja tenga permiso de lectura pública o esté configurada como <i>"Cualquier usuario con el enlace puede leer"</i>.
               </p>
             </div>
 
-            {/* Alternar Modo API Key vs Modo Público */}
-            <div className="pt-2">
-              <label className="flex items-center space-x-2 text-xs font-semibold text-slate-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={useApiKey}
-                  onChange={(e) => setUseApiKey(e.target.checked)}
-                  className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-                />
-                <span className="flex items-center gap-1">
-                  <Key className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Usar Google Sheets API v4 oficial (con API Key de Google Cloud)</span>
-                </span>
-              </label>
+            {/* Configuración de Polling Inteligente (60-120 seg) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider mb-1.5">
+                  Intervalo de consulta periódica (Polling)
+                </label>
+                <div className="flex items-center space-x-2">
+                  <select
+                    value={pollingSeconds}
+                    onChange={(e) => setPollingSeconds(Number(e.target.value))}
+                    className="px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-xs font-semibold text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  >
+                    <option value={30}>Cada 30 segundos</option>
+                    <option value={60}>Cada 60 segundos (Recomendado)</option>
+                    <option value={120}>Cada 120 segundos (Ahorro de cuota)</option>
+                    <option value={300}>Cada 5 minutos</option>
+                    <option value={0}>Manual únicamente (Sin polling)</option>
+                  </select>
+                </div>
+                <p className="text-[11px] text-zinc-400 mt-1">
+                  Evita saturar la cuota de la API de Google consultando periódicamente en segundo plano.
+                </p>
+              </div>
 
-              {useApiKey && (
-                <div className="mt-2 pl-6">
+              {/* Modo API Key Opcional */}
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider mb-1.5">
                   <input
-                    type="text"
+                    type="checkbox"
+                    checked={useApiKey}
+                    onChange={(e) => setUseApiKey(e.target.checked)}
+                    className="rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span>Usar Google Sheets API Key (Opcional)</span>
+                </label>
+                {useApiKey && (
+                  <input
+                    type="password"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="AIzaSy..."
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="AIzaSyB..."
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-xs font-mono text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 mt-1"
                   />
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Ingresá tu API Key de Google Cloud Console con la API de Google Sheets habilitada.
-                  </p>
+                )}
+                <p className="text-[11px] text-zinc-400 mt-1">
+                  Si la hoja es pública, no se requiere API Key.
+                </p>
+              </div>
+            </div>
+
+            {/* Alertas Sheets */}
+            {sheetError && (
+              <div className="p-4 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-200 text-xs sm:text-sm flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">Error de conexión con Google Sheets</p>
+                  <p className="text-xs mt-0.5 opacity-90">{sheetError}</p>
+                </div>
+              </div>
+            )}
+
+            {sheetSuccess && (
+              <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-200 text-xs sm:text-sm flex items-start gap-2.5">
+                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">Conexión establecida</p>
+                  <p className="text-xs mt-0.5 opacity-90">{sheetSuccess}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Acciones */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleConnectSheet}
+                  disabled={isSyncing}
+                  className="px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm shadow-sm transition disabled:opacity-50 flex items-center gap-2"
+                >
+                  <RotateCcw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isSyncing ? 'Conectando...' : 'Conectar y Sincronizar Ahora'}</span>
+                </button>
+
+                {config.googleSheetUrl && (
+                  <button
+                    onClick={handleDisconnectSheet}
+                    className="px-3 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-rose-600 text-xs font-semibold transition"
+                  >
+                    Desconectar hoja
+                  </button>
+                )}
+              </div>
+
+              {config.googleSheetUrl && (
+                <div className="flex items-center text-xs text-zinc-500 font-mono">
+                  <Clock className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                  <span>Próxima consulta en: <b>{pollingCountdown}s</b></span>
                 </div>
               )}
             </div>
 
-            {/* Configuración de Intervalo de Polling */}
-            <div className="pt-3 border-t border-slate-100">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                <Clock className="w-4 h-4 text-emerald-600" />
-                <span>Intervalo de Polling (Consultas periódicas a la hoja)</span>
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {[
-                  { label: 'Cada 60 seg (Recomendado)', val: 60 },
-                  { label: 'Cada 90 seg', val: 90 },
-                  { label: 'Cada 120 seg', val: 120 },
-                  { label: 'Manual (Sin auto-sync)', val: 0 },
-                ].map((opt) => (
-                  <button
-                    key={opt.val}
-                    type="button"
-                    onClick={() => setPollingSeconds(opt.val)}
-                    className={`p-2.5 rounded-xl border text-xs font-medium transition text-left ${
-                      Number(pollingSeconds) === opt.val
-                        ? 'border-emerald-500 bg-emerald-50 text-emerald-800 font-bold'
-                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-slate-400 mt-1.5">
-                El polling periódico evita saturar la cuota de la API de Google (100 consultas cada 100 segundos) y detecta filas nuevas, editadas o eliminadas.
-              </p>
-            </div>
-          </div>
-
-          {/* Mensajes de Alerta / Éxito */}
-          {sheetError && (
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start space-x-3 text-rose-800 text-sm">
-              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-rose-600" />
-              <span>{sheetError}</span>
-            </div>
-          )}
-
-          {sheetSuccess && (
-            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start space-x-3 text-emerald-800 text-sm">
-              <CheckCircle className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600" />
-              <span>{sheetSuccess}</span>
-            </div>
-          )}
-
-          {/* Botón de Conexión y Estado */}
-          <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-xs text-slate-500">
-              {Number(pollingSeconds) > 0 ? (
-                <span className="flex items-center gap-1.5 font-medium text-slate-700">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                  Próxima consulta automática en: <b>{pollingCountdown}s</b>
-                </span>
-              ) : (
-                <span>Polling automático desactivado. Usar sincronización manual.</span>
-              )}
-            </div>
-
-            <button
-              onClick={() => handleConnectSheet(true)}
-              disabled={isSyncing}
-              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-md shadow-emerald-600/20 active:scale-95 transition flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              <RotateCcw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Consultando Google Sheet...' : 'Sincronizar Ahora'}</span>
-            </button>
           </div>
         </div>
       )}

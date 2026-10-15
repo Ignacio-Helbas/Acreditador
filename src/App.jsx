@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Navbar from './components/Navbar';
 import OperatorView from './components/OperatorView';
 import DataSourceView from './components/DataSourceView';
 import SettingsView from './components/SettingsView';
 import StatsView from './components/StatsView';
+import BrandingSettingsView from './components/BrandingSettingsView';
+import AuditLogsView from './components/AuditLogsView';
 import AdminPinModal from './components/AdminPinModal';
+import LoadingScreen from './components/LoadingScreen';
 import { apiService } from './services/api';
 import { playSuccessSound, playWarningSound } from './utils/sound';
 import { fetchGoogleSheetViaCSV, fetchGoogleSheetViaAPI } from './utils/googleSheets';
@@ -13,7 +16,11 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState('operator');
   const [isAdmin, setIsAdmin] = useState(() => apiService.isAdmin());
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
-  const [eventName, setEventName] = useState('Mi Evento 2026');
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+
+  // Información del Evento
+  const [eventName, setEventName] = useState('Mi Evento');
+  const [eventLogo, setEventLogo] = useState(null);
   const [attendees, setAttendees] = useState([]);
   const [config, setConfig] = useState({
     visibleFields: ['empresa', 'cargo', 'tipoEntrada', 'mesa'],
@@ -30,6 +37,7 @@ export default function App() {
     pollingInterval: 60,
     googleSheetUrl: '',
     googleApiKey: '',
+    adminPin: '1234',
   });
 
   // Estado de sincronización y red
@@ -41,7 +49,24 @@ export default function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [serverConnected, setServerConnected] = useState(false);
 
-  // Preferencias
+  // Modo Oscuro con persistencia en localStorage y detección de preferencia de sistema
+  const [isDark, setIsDark] = useState(() => {
+    const saved = localStorage.getItem('acreditador_theme');
+    if (saved) return saved === 'dark';
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('acreditador_theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('acreditador_theme', 'light');
+    }
+  }, [isDark]);
+
+  // Preferencias de Operador
   const [soundEnabled, setSoundEnabled] = useState(() => {
     return localStorage.getItem('acreditador_sound') !== 'false';
   });
@@ -52,7 +77,6 @@ export default function App() {
     return localStorage.getItem('acreditador_operator_name') || 'Operador Puerta 1';
   });
 
-  // Guardar preferencias en localStorage
   useEffect(() => {
     localStorage.setItem('acreditador_sound', soundEnabled);
   }, [soundEnabled]);
@@ -70,18 +94,29 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
 
-    // 1. Obtener estado inicial
+    // 1. Obtener estado inicial desde el servidor o localStorage
     apiService.getInitialState().then(({ data, connectedOperators: ops }) => {
-      if (!isMounted || !data) return;
+      if (!isMounted || !data) {
+        setIsInitialLoading(false);
+        return;
+      }
       if (data.eventName) setEventName(data.eventName);
+      if (data.eventLogo) setEventLogo(data.eventLogo);
       if (data.attendees) setAttendees(data.attendees);
       if (data.config) setConfig((prev) => ({ ...prev, ...data.config }));
       if (data.lastUpdated) setLastSyncTime(data.lastUpdated);
       if (data.lastSyncSource) setLastSyncSource(data.lastSyncSource);
       if (ops) setConnectedOperators(ops);
+
+      // Breve pausa para dar una bienvenida visual armónica
+      setTimeout(() => {
+        if (isMounted) setIsInitialLoading(false);
+      }, 400);
+    }).catch(() => {
+      if (isMounted) setIsInitialLoading(false);
     });
 
-    // 2. Conectar WebSocket para sincronización en tiempo real multi-operador
+    // 2. Conectar WebSocket para sincronización en vivo
     apiService.connectWebSocket();
 
     // 3. Suscribirse a eventos en tiempo real
@@ -92,6 +127,7 @@ export default function App() {
         case 'INIT_STATE':
           if (msg.data) {
             if (msg.data.eventName) setEventName(msg.data.eventName);
+            if (msg.data.eventLogo !== undefined) setEventLogo(msg.data.eventLogo);
             if (msg.data.attendees) setAttendees(msg.data.attendees);
             if (msg.data.config) setConfig((prev) => ({ ...prev, ...msg.data.config }));
             if (msg.data.lastUpdated) setLastSyncTime(msg.data.lastUpdated);
@@ -124,6 +160,11 @@ export default function App() {
         case 'CONFIG_UPDATED':
           if (msg.config) setConfig((prev) => ({ ...prev, ...msg.config }));
           if (msg.eventName) setEventName(msg.eventName);
+          break;
+
+        case 'BRANDING_UPDATED':
+          if (msg.eventName) setEventName(msg.eventName);
+          if (msg.eventLogo !== undefined) setEventLogo(msg.eventLogo);
           break;
 
         case 'OPERATORS_COUNT':
@@ -165,7 +206,6 @@ export default function App() {
     const timer = setInterval(() => {
       setPollingCountdown((prev) => {
         if (prev <= 1) {
-          // Ejecutar polling en segundo plano
           triggerBackgroundSheetSync();
           return intervalSeconds;
         }
@@ -224,7 +264,7 @@ export default function App() {
     }
   };
 
-  // Manejar sincronización de asistentes (desde Excel o Sheets)
+  // Sincronización de asistentes (desde Excel o Sheets)
   const handleSyncAttendees = async (newAttendees, source) => {
     setIsSyncing(true);
     try {
@@ -237,24 +277,25 @@ export default function App() {
     }
   };
 
-  // Guardar configuración
+  // Guardar configuración general
   const handleSaveConfig = async (newConfig) => {
     setConfig(newConfig);
     await apiService.saveConfig(newConfig, eventName);
   };
 
-  // Guardar nombre del evento
-  const handleSaveEventName = async (name) => {
+  // Guardar marca del evento (nombre y logo)
+  const handleSaveBranding = async (name, logo) => {
     setEventName(name);
-    await apiService.saveConfig(config, name);
+    setEventLogo(logo);
+    await apiService.saveBranding(name, logo);
   };
 
-  // Reiniciar acreditaciones
+  // Reiniciar acreditaciones a cero
   const handleResetAccreditations = async () => {
     await apiService.resetAccreditations();
   };
 
-  // Métricas
+  // Métricas rápidas
   const stats = useMemo(() => {
     const total = attendees.length;
     const accredited = attendees.filter((a) => a.acreditado).length;
@@ -287,14 +328,19 @@ export default function App() {
     setCurrentTab(tab);
   };
 
+  if (isInitialLoading) {
+    return <LoadingScreen eventName={eventName} eventLogo={eventLogo} />;
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      {/* Barra de Navegación Superior */}
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200">
+      
+      {/* Barra Superior con Logo, Nombre, Rol y Selector de Pestañas */}
       <Navbar
         currentTab={currentTab}
         setCurrentTab={handleSelectTab}
         eventName={eventName}
-        setEventName={handleSaveEventName}
+        eventLogo={eventLogo}
         stats={stats}
         connectedOperators={connectedOperators}
         isOnline={isOnline}
@@ -305,10 +351,13 @@ export default function App() {
         isAdmin={isAdmin}
         onOpenAdminModal={() => setIsAdminModalOpen(true)}
         onLogoutAdmin={handleLogoutAdmin}
+        isDark={isDark}
+        onToggleTheme={() => setIsDark((prev) => !prev)}
       />
 
-      {/* Contenido Principal según Pestaña y Rol */}
+      {/* Contenido Principal con separación estricta de vistas por rol */}
       <main className="flex-1 pb-16">
+        {/* Vista de Operador (Puerta): disponible para operadores y administradores */}
         {currentTab === 'operator' && (
           <OperatorView
             attendees={attendees}
@@ -323,6 +372,7 @@ export default function App() {
           />
         )}
 
+        {/* Vistas de Administración: NUNCA se renderizan si no está autenticado */}
         {isAdmin && currentTab === 'datasource' && (
           <DataSourceView
             onSyncAttendees={handleSyncAttendees}
@@ -333,6 +383,16 @@ export default function App() {
             isSyncing={isSyncing}
             setIsSyncing={setIsSyncing}
             pollingCountdown={pollingCountdown}
+          />
+        )}
+
+        {isAdmin && currentTab === 'stats' && (
+          <StatsView
+            attendees={attendees}
+            config={config}
+            eventName={eventName}
+            onResetAccreditations={handleResetAccreditations}
+            onToggleAccredit={(dni, acc) => apiService.accredit(dni, acc)}
           />
         )}
 
@@ -350,14 +410,18 @@ export default function App() {
           />
         )}
 
-        {isAdmin && currentTab === 'stats' && (
-          <StatsView
-            attendees={attendees}
-            config={config}
+        {isAdmin && currentTab === 'branding' && (
+          <BrandingSettingsView
             eventName={eventName}
-            onResetAccreditations={handleResetAccreditations}
-            onToggleAccredit={(dni, acc) => apiService.accredit(dni, acc)}
+            eventLogo={eventLogo}
+            onSaveBranding={handleSaveBranding}
+            config={config}
+            onSaveConfig={handleSaveConfig}
           />
+        )}
+
+        {isAdmin && currentTab === 'audit' && (
+          <AuditLogsView />
         )}
       </main>
 

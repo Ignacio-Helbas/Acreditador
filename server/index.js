@@ -25,6 +25,7 @@ if (!fs.existsSync(DATA_DIR)) {
 // Estructura de datos en memoria con persistencia en archivo
 let eventState = {
   eventName: "Evento General",
+  eventLogo: null, // URL o Base64 del logo/portada del evento
   lastUpdated: new Date().toISOString(),
   lastSyncSource: null, // 'excel' | 'google-sheets'
   config: {
@@ -48,7 +49,8 @@ let eventState = {
     adminPin: '1234', // PIN por defecto para funciones de administrador
   },
   attendees: [], // Array de asistentes
-  history: [], // Historial de acciones para auditoría
+  history: [], // Historial de acciones de acreditación para auditoría de puerta
+  auditLogs: [], // Registro de auditoría administrativa (cambios de base, config, branding)
 };
 
 // Cargar estado previo si existe
@@ -105,14 +107,64 @@ function requireAdmin(req, res, next) {
   });
 }
 
+// Registrar acción de auditoría administrativa
+function addAuditLog(type, description, user = 'Administrador') {
+  if (!eventState.auditLogs) eventState.auditLogs = [];
+  eventState.auditLogs.unshift({
+    id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
+    type,
+    description,
+    timestamp: new Date().toISOString(),
+    user,
+  });
+  if (eventState.auditLogs.length > 500) {
+    eventState.auditLogs = eventState.auditLogs.slice(0, 500);
+  }
+}
+
 // Endpoint para validar el PIN ingresado por el organizador
 app.post('/api/auth/verify-pin', (req, res) => {
   const { pin } = req.body;
   const currentPin = eventState.config.adminPin || '1234';
   if (pin && String(pin).trim() === String(currentPin).trim()) {
+    addAuditLog('ADMIN_LOGIN', 'Inicio de sesión como Administrador autorizado', req.body.operator || 'Administrador');
     return res.json({ success: true, valid: true });
   }
   return res.status(401).json({ success: false, valid: false, error: 'PIN de Administrador incorrecto.' });
+});
+
+// Actualizar personalización del evento (Nombre y Logo) - Exclusivo Administrador
+app.post('/api/admin/branding', requireAdmin, (req, res) => {
+  const { eventName, eventLogo, operator = 'Administrador' } = req.body;
+  if (eventName) {
+    eventState.eventName = eventName.trim();
+  }
+  if (eventLogo !== undefined) {
+    eventState.eventLogo = eventLogo;
+  }
+  eventState.lastUpdated = new Date().toISOString();
+  addAuditLog('BRANDING_UPDATE', `Personalización actualizada: Nombre "${eventState.eventName}", Logo ${eventLogo ? 'cargado' : 'sin logo'}`, operator);
+  saveToDisk();
+
+  broadcast({
+    type: 'BRANDING_UPDATED',
+    eventName: eventState.eventName,
+    eventLogo: eventState.eventLogo,
+  });
+
+  res.json({
+    success: true,
+    eventName: eventState.eventName,
+    eventLogo: eventState.eventLogo,
+  });
+});
+
+// Obtener historial de auditoría administrativa - Exclusivo Administrador
+app.get('/api/admin/audit-logs', requireAdmin, (req, res) => {
+  res.json({
+    success: true,
+    auditLogs: eventState.auditLogs || [],
+  });
 });
 
 // Obtener estado completo del evento
@@ -121,7 +173,7 @@ app.get('/api/event', (req, res) => {
   const currentPin = eventState.config.adminPin || '1234';
   const isAdmin = Boolean(clientPin && String(clientPin).trim() === String(currentPin).trim());
 
-  // Ocultar el PIN real a operadores no administradores
+  // Ocultar el PIN real y registros sensibles a operadores no administradores
   const safeConfig = {
     ...eventState.config,
     adminPin: isAdmin ? eventState.config.adminPin : undefined,
@@ -133,6 +185,7 @@ app.get('/api/event', (req, res) => {
     data: {
       ...eventState,
       config: safeConfig,
+      auditLogs: isAdmin ? eventState.auditLogs : undefined,
     },
     isAdmin,
     connectedOperators: wss.clients.size,
@@ -256,6 +309,7 @@ app.post('/api/event/sync', requireAdmin, (req, res) => {
   eventState.attendees = mergedAttendees;
   eventState.lastSyncSource = source;
   eventState.lastUpdated = new Date().toISOString();
+  addAuditLog('DATA_SYNC', `Sincronización vía ${source}: ${mergedAttendees.length} registros (${addedCount} nuevos, ${updatedCount} actualizados, ${preservedAccreditations} acreditaciones preservadas)`, req.body.operator || 'Administrador');
   saveToDisk();
 
   broadcast({
@@ -284,6 +338,7 @@ app.post('/api/event/config', requireAdmin, (req, res) => {
     eventState.eventName = eventName;
   }
   eventState.lastUpdated = new Date().toISOString();
+  addAuditLog('CONFIG_UPDATE', `Configuración del evento actualizada`, req.body.operator || 'Administrador');
   saveToDisk();
 
   broadcast({
@@ -304,6 +359,7 @@ app.post('/api/event/reset-accreditations', requireAdmin, (req, res) => {
   });
   eventState.history = [];
   eventState.lastUpdated = new Date().toISOString();
+  addAuditLog('DATA_RESET', `Reinicio total de acreditaciones ejecutado`, req.body.operator || 'Administrador');
   saveToDisk();
 
   broadcast({

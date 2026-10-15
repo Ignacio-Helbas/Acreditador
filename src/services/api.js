@@ -363,6 +363,62 @@ class ApiService {
     return { success: true, config: localState.config };
   }
 
+  // Guardar personalización de marca (Nombre y Logo)
+  async saveBranding(eventName, eventLogo) {
+    if (this.serverConnected && this.isOnline) {
+      try {
+        const res = await fetch('/api/admin/branding', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-pin': this.adminPin,
+          },
+          body: JSON.stringify({ eventName, eventLogo, operator: this.operatorName }),
+        });
+        if (res.ok) return await res.json();
+        if (res.status === 403) {
+          throw new Error('Se requiere PIN de Administrador para modificar la personalización.');
+        }
+      } catch (e) {
+        console.warn('Error guardando personalización en backend:', e);
+        throw e;
+      }
+    }
+
+    const localState = this.getLocalState();
+    if (eventName) localState.eventName = eventName;
+    if (eventLogo !== undefined) localState.eventLogo = eventLogo;
+    this.saveLocalState(localState);
+
+    this.notifyListeners({
+      type: 'BRANDING_UPDATED',
+      eventName: localState.eventName,
+      eventLogo: localState.eventLogo,
+    });
+
+    return { success: true, eventName: localState.eventName, eventLogo: localState.eventLogo };
+  }
+
+  // Obtener logs de auditoría
+  async getAuditLogs() {
+    if (this.serverConnected && this.isOnline) {
+      try {
+        const res = await fetch('/api/admin/audit-logs', {
+          headers: {
+            'x-admin-pin': this.adminPin,
+          },
+        });
+        if (res.ok) {
+          const json = await res.json();
+          return json.auditLogs || [];
+        }
+      } catch (e) {
+        console.warn('Error obteniendo logs de auditoría:', e);
+      }
+    }
+    return this.getLocalState().auditLogs || [];
+  }
+
   // Resetear acreditaciones
   async resetAccreditations() {
     if (this.serverConnected && this.isOnline) {
@@ -412,6 +468,7 @@ class ApiService {
     }
     return {
       eventName: 'Evento Principal',
+      eventLogo: null,
       lastUpdated: new Date().toISOString(),
       lastSyncSource: null,
       config: {
@@ -430,9 +487,11 @@ class ApiService {
         pollingInterval: 60,
         googleSheetUrl: '',
         googleApiKey: '',
+        adminPin: '1234',
       },
       attendees: [],
       history: [],
+      auditLogs: [],
     };
   }
 

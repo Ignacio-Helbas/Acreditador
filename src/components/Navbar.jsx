@@ -9,15 +9,18 @@ import {
   VolumeX, 
   FileSpreadsheet,
   Lock,
-  Unlock,
-  ShieldCheck
+  LogOut,
+  Sun,
+  Moon,
+  Sparkles,
+  ClipboardList
 } from 'lucide-react';
 
 export default function Navbar({ 
   currentTab, 
   setCurrentTab, 
   eventName, 
-  setEventName, 
+  eventLogo,
   stats, 
   connectedOperators, 
   isOnline, 
@@ -27,171 +30,227 @@ export default function Navbar({
   operatorName,
   isAdmin,
   onOpenAdminModal,
-  onLogoutAdmin
+  onLogoutAdmin,
+  isDark,
+  onToggleTheme
 }) {
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-40 transition-colors">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           
           {/* Logo y Nombre del Evento */}
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-emerald-500/20">
-              <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                {isAdmin ? (
-                  <input
-                    type="text"
-                    value={eventName}
-                    onChange={(e) => setEventName(e.target.value)}
-                    className="font-bold text-slate-800 text-lg hover:bg-slate-100/80 px-1.5 py-0.5 rounded transition border border-transparent hover:border-slate-300 focus:border-emerald-500 focus:bg-white focus:outline-none w-52 sm:w-64"
-                    title="Haz clic para renombrar el evento (Modo Administrador)"
-                  />
-                ) : (
-                  <span className="font-bold text-slate-800 text-lg px-1.5 py-0.5 block truncate max-w-[200px] sm:max-w-xs">
-                    {eventName}
-                  </span>
-                )}
+          <div className="flex items-center space-x-3 min-w-0">
+            {eventLogo ? (
+              <img 
+                src={eventLogo} 
+                alt="Logo del evento" 
+                className="h-9 w-9 object-contain rounded-md border border-zinc-200 dark:border-zinc-800 bg-white p-0.5 shrink-0"
+              />
+            ) : (
+              <div className="h-9 w-9 rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 flex items-center justify-center font-bold text-sm shrink-0">
+                {eventName ? eventName.charAt(0).toUpperCase() : 'E'}
               </div>
-              <p className="text-xs text-slate-500 flex items-center gap-1.5 pl-1.5">
-                <span>{isAdmin ? 'Modo Administrador' : 'Modo Operador'}</span>
-                <span className="text-slate-300">•</span>
-                <span className="font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                  {operatorName}
-                </span>
-              </p>
+            )}
+
+            <div className="min-w-0">
+              <h1 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm sm:text-base leading-tight truncate max-w-[180px] sm:max-w-xs md:max-w-md">
+                {eventName || 'Acreditación de Evento'}
+              </h1>
+              <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 font-medium">
+                <span className={`inline-block w-1.5 h-1.5 rounded-full ${isAdmin ? 'bg-indigo-500' : 'bg-emerald-500'}`} />
+                <span className="truncate">{isAdmin ? 'Panel de Administración' : `${operatorName}`}</span>
+              </div>
             </div>
           </div>
 
-          {/* Navegación por Pestañas */}
-          <nav className="flex items-center space-x-1 sm:space-x-2">
-            {/* Pestaña Acreditar (Siempre visible) */}
+          {/* Navegación por Pestañas (Solo visible en modo Administrador) */}
+          {isAdmin ? (
+            <nav className="hidden lg:flex items-center bg-zinc-100 dark:bg-zinc-800/70 p-1 rounded-lg border border-zinc-200 dark:border-zinc-700/60 text-xs font-semibold">
+              <button
+                onClick={() => setCurrentTab('operator')}
+                className={`px-3 py-1.5 rounded-md transition ${
+                  currentTab === 'operator'
+                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+              >
+                Vista Puerta
+              </button>
+              <button
+                onClick={() => setCurrentTab('datasource')}
+                className={`px-3 py-1.5 rounded-md transition ${
+                  currentTab === 'datasource'
+                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+              >
+                Fuente de Datos
+              </button>
+              <button
+                onClick={() => setCurrentTab('stats')}
+                className={`px-3 py-1.5 rounded-md transition ${
+                  currentTab === 'stats'
+                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+              >
+                Métricas y Exportar
+              </button>
+              <button
+                onClick={() => setCurrentTab('settings')}
+                className={`px-3 py-1.5 rounded-md transition ${
+                  currentTab === 'settings'
+                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+              >
+                Campos y Filtros
+              </button>
+              <button
+                onClick={() => setCurrentTab('branding')}
+                className={`px-3 py-1.5 rounded-md transition ${
+                  currentTab === 'branding'
+                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+              >
+                Marca y Logo
+              </button>
+              <button
+                onClick={() => setCurrentTab('audit')}
+                className={`px-3 py-1.5 rounded-md transition ${
+                  currentTab === 'audit'
+                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+              >
+                Auditoría
+              </button>
+            </nav>
+          ) : (
+            /* Vista Operador: Contador conciso en el header */
+            <div className="hidden sm:flex items-center space-x-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400">
+              <span className="font-mono text-zinc-900 dark:text-zinc-100 font-bold bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700">
+                {stats.accredited} / {stats.total} acreditados ({stats.rate}%)
+              </span>
+            </div>
+          )}
+
+          {/* Acciones de la derecha: Tema, Sonido, Conexión y Rol */}
+          <div className="flex items-center space-x-2">
+            {/* Toggle Modo Oscuro */}
             <button
-              onClick={() => setCurrentTab('operator')}
-              className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-all ${
-                currentTab === 'operator'
-                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
+              onClick={onToggleTheme}
+              title={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+              className="p-2 rounded-lg text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 transition"
             >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Acreditar</span>
-              {stats.total > 0 && (
-                <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
-                  currentTab === 'operator' 
-                    ? 'bg-emerald-700/80 text-emerald-100' 
-                    : 'bg-slate-200 text-slate-700'
-                }`}>
-                  {stats.accredited}/{stats.total}
-                </span>
-              )}
+              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
 
-            {/* Pestañas exclusivas para Administradores */}
-            {isAdmin ? (
-              <>
-                <button
-                  onClick={() => setCurrentTab('datasource')}
-                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                    currentTab === 'datasource'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  <span className="hidden sm:inline">Fuente de Datos</span>
-                </button>
-
-                <button
-                  onClick={() => setCurrentTab('stats')}
-                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                    currentTab === 'stats'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <BarChart3 className="w-4 h-4" />
-                  <span className="hidden sm:inline">Métricas y Exportar</span>
-                </button>
-
-                <button
-                  onClick={() => setCurrentTab('settings')}
-                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                    currentTab === 'settings'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <Settings className="w-4 h-4" />
-                  <span className="hidden sm:inline">Configuración</span>
-                </button>
-
-                <button
-                  onClick={onLogoutAdmin}
-                  title="Bloquear a Modo Operador"
-                  className="flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition"
-                >
-                  <Unlock className="w-3.5 h-3.5 text-amber-600" />
-                  <span className="hidden md:inline">Bloquear a Operador</span>
-                </button>
-              </>
-            ) : (
-              /* Botón de Acceso para Administrador cuando se está en Modo Operador */
-              <button
-                onClick={onOpenAdminModal}
-                className="flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200 border border-slate-200 transition"
-                title="Desbloquear panel de administrador para modificar base de datos o configuraciones"
-              >
-                <Lock className="w-3.5 h-3.5 text-slate-500" />
-                <span>Acceso Administrador</span>
-              </button>
-            )}
-          </nav>
-
-          {/* Estado de Red / Sonido / Multi-operador */}
-          <div className="flex items-center space-x-2">
             {/* Toggle de sonido */}
             <button
               onClick={() => setSoundEnabled(!soundEnabled)}
-              title={soundEnabled ? 'Sonidos activados (clic para silenciar)' : 'Sonidos silenciados (clic para activar)'}
-              className={`p-2 rounded-lg text-xs font-medium transition border ${
+              title={soundEnabled ? 'Sonidos activados' : 'Sonidos silenciados'}
+              className={`p-2 rounded-lg text-xs font-medium border transition ${
                 soundEnabled 
-                  ? 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200' 
-                  : 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100'
+                  ? 'text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800' 
+                  : 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900/50'
               }`}
             >
               {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
             </button>
 
-            {/* Badge de estado de sincronización */}
+            {/* Indicador de conexión */}
             <div 
-              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+              className={`p-2 rounded-lg text-xs border ${
                 serverConnected && isOnline
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                  : !isOnline
-                  ? 'bg-amber-50 text-amber-800 border-amber-200'
-                  : 'bg-slate-100 text-slate-700 border-slate-200'
+                  ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/50'
+                  : 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900/50'
               }`}
-              title={
-                serverConnected 
-                  ? `Sincronización en vivo activa. ${connectedOperators} operadores en red.` 
-                  : 'Modo autónomo/offline activo. Los datos se guardan en el navegador.'
-              }
+              title={serverConnected ? `En línea con ${connectedOperators} operador(es)` : 'Modo local sin servidor'}
             >
-              {isOnline ? (
-                <Wifi className="w-3.5 h-3.5 text-emerald-600" />
-              ) : (
-                <WifiOff className="w-3.5 h-3.5 text-amber-600" />
-              )}
-              <span className="hidden md:inline">
-                {serverConnected ? `${connectedOperators} op.` : isOnline ? 'Local' : 'Offline'}
-              </span>
+              {isOnline ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
             </div>
+
+            {/* Botón de Rol: Entrar a Admin o Salir */}
+            {isAdmin ? (
+              <button
+                onClick={onLogoutAdmin}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-300 dark:border-zinc-700 transition"
+                title="Cerrar sesión de administrador y volver a modo operador"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Cerrar Admin</span>
+              </button>
+            ) : (
+              <button
+                onClick={onOpenAdminModal}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 transition"
+                title="Ingresar como Administrador"
+              >
+                <Lock className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
+                <span className="hidden sm:inline">Admin</span>
+              </button>
+            )}
           </div>
 
         </div>
+
+        {/* Barra secundaria en móviles para Admin */}
+        {isAdmin && (
+          <div className="lg:hidden flex items-center overflow-x-auto py-2 space-x-2 border-t border-zinc-100 dark:border-zinc-800 text-xs font-medium no-scrollbar">
+            <button
+              onClick={() => setCurrentTab('operator')}
+              className={`px-2.5 py-1 rounded-md shrink-0 ${
+                currentTab === 'operator' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400'
+              }`}
+            >
+              Puerta
+            </button>
+            <button
+              onClick={() => setCurrentTab('datasource')}
+              className={`px-2.5 py-1 rounded-md shrink-0 ${
+                currentTab === 'datasource' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400'
+              }`}
+            >
+              Datos
+            </button>
+            <button
+              onClick={() => setCurrentTab('stats')}
+              className={`px-2.5 py-1 rounded-md shrink-0 ${
+                currentTab === 'stats' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400'
+              }`}
+            >
+              Métricas
+            </button>
+            <button
+              onClick={() => setCurrentTab('settings')}
+              className={`px-2.5 py-1 rounded-md shrink-0 ${
+                currentTab === 'settings' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400'
+              }`}
+            >
+              Campos
+            </button>
+            <button
+              onClick={() => setCurrentTab('branding')}
+              className={`px-2.5 py-1 rounded-md shrink-0 ${
+                currentTab === 'branding' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400'
+              }`}
+            >
+              Logo
+            </button>
+            <button
+              onClick={() => setCurrentTab('audit')}
+              className={`px-2.5 py-1 rounded-md shrink-0 ${
+                currentTab === 'audit' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400'
+              }`}
+            >
+              Auditoría
+            </button>
+          </div>
+        )}
+
       </div>
     </header>
   );
