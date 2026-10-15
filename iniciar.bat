@@ -5,10 +5,14 @@ echo ==========================================================
 echo        🎫 INICIANDO ACREDITADOR GENÉRICO DE EVENTOS
 echo ==========================================================
 echo.
-echo  Abriendo el navegador en http://localhost:3001 ...
-echo  Para cerrar el servidor, cerrá esta ventana o presioná Ctrl + C.
+echo  Iniciando servidor local en http://localhost:3001 ...
+echo.
+echo  IMPORTANTE:
+echo  - Mantén esta ventana abierta mientras uses la aplicación.
+echo  - Si la cierras, el servidor se detendrá.
 echo.
 
+timeout /t 2 /nobreak > nul
 start http://localhost:3001
 node server/index.js
 pause
