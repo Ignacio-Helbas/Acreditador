@@ -22,7 +22,17 @@ import {
 const FIREBASE_CONFIG_KEY = 'acreditador_firebase_config';
 const DEFAULT_EVENT_ID = 'main-event';
 
-// Obtener configuración de Firebase (Variables de entorno o localStorage)
+// Configuración predeterminada de Firebase del proyecto (acreditador-utn-frsr)
+const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBEw2iG1t4CWaTG99A2OUxDlkgpDm3HpBA",
+  authDomain: "acreditador-utn-frsr.firebaseapp.com",
+  projectId: "acreditador-utn-frsr",
+  storageBucket: "acreditador-utn-frsr.firebasestorage.app",
+  messagingSenderId: "675766998899",
+  appId: "1:675766998899:web:4b3982d8fa4503e7c3d706"
+};
+
+// Obtener configuración de Firebase (Variables de entorno, localStorage o default oficial)
 export function getFirebaseConfig() {
   if (typeof window !== 'undefined') {
     const local = localStorage.getItem(FIREBASE_CONFIG_KEY);
@@ -39,7 +49,7 @@ export function getFirebaseConfig() {
   }
 
   // Fallback a variables de entorno de Vite
-  if (import.meta.env.VITE_FIREBASE_API_KEY && import.meta.env.VITE_FIREBASE_PROJECT_ID) {
+  if (import.meta.env?.VITE_FIREBASE_API_KEY && import.meta.env?.VITE_FIREBASE_PROJECT_ID) {
     return {
       apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
       authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.firebaseapp.com`,
@@ -50,7 +60,8 @@ export function getFirebaseConfig() {
     };
   }
 
-  return null;
+  // Fallback a la configuración oficial del proyecto
+  return DEFAULT_FIREBASE_CONFIG;
 }
 
 // Guardar configuración de Firebase personalizada
