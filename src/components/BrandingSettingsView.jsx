@@ -10,7 +10,6 @@ export default function BrandingSettingsView({
 }) {
   const [name, setName] = useState(eventName || '');
   const [logoPreview, setLogoPreview] = useState(eventLogo || null);
-  const [adminPin, setAdminPin] = useState(config.adminPin || '1234');
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState(null);
 
@@ -70,9 +69,6 @@ export default function BrandingSettingsView({
 
     try {
       await onSaveBranding(name.trim(), logoPreview);
-      if (adminPin.trim() && adminPin !== config.adminPin) {
-        await onSaveConfig({ ...config, adminPin: adminPin.trim() }, name.trim());
-      }
       setMessage({ type: 'success', text: 'Personalización guardada con éxito.' });
       setTimeout(() => setMessage(null), 3500);
     } catch (err) {
@@ -183,26 +179,6 @@ export default function BrandingSettingsView({
               </span>
             </div>
           </div>
-        </div>
-
-        {/* Seguridad: PIN de Administrador */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-6 space-y-3">
-          <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
-            PIN de Administrador (Seguridad)
-          </label>
-          <div className="max-w-xs">
-            <input
-              type="password"
-              maxLength={10}
-              value={adminPin}
-              onChange={(e) => setAdminPin(e.target.value)}
-              placeholder="1234"
-              className="w-full px-4 py-2.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 text-sm font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-emerald-500"
-            />
-          </div>
-          <p className="text-xs text-zinc-400 dark:text-zinc-500">
-            Los operadores que no tengan este PIN solo podrán acreditar y no verán esta pestaña ni podrán borrar datos.
-          </p>
         </div>
 
         {/* Mensaje de Feedback */}

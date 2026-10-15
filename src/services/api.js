@@ -124,10 +124,10 @@ class ApiService {
       }
     }
 
-    // Validación local / Firestore
+    // Validación local
     const local = this.getLocalState();
-    const expected = local.config?.adminPin || '1234';
-    if (String(pin).trim() === String(expected).trim()) {
+    const expected = local.config?.adminPin;
+    if (expected && String(pin).trim() === String(expected).trim()) {
       this.setAdminPin(pin);
       return { success: true };
     }
@@ -611,7 +611,6 @@ class ApiService {
         pollingInterval: 60,
         googleSheetUrl: '',
         googleApiKey: '',
-        adminPin: '1234',
       },
       auditLogs: [],
       lastUpdated: null,

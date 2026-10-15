@@ -28,7 +28,6 @@ export default function SettingsView({
   const [fieldLabels, setFieldLabels] = useState(config.fieldLabels || {});
   const [filterField, setFilterField] = useState(config.filterField || '');
   const [currentOperator, setCurrentOperator] = useState(operatorName);
-  const [adminPin, setAdminPin] = useState(config.adminPin || '1234');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Obtener todos los campos dinámicos disponibles en la nómina de asistentes
@@ -67,7 +66,6 @@ export default function SettingsView({
       visibleFields,
       fieldLabels,
       filterField,
-      adminPin: adminPin.trim() || '1234',
     };
     await onSaveConfig(newConfig);
     setOperatorName(currentOperator);
